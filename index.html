@@ -1,0 +1,2418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LGEVH 3D Factory Floor Reconstruction</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0d10;
+            --panel-bg: rgba(15, 20, 28, 0.75);
+            --panel-border: rgba(0, 240, 255, 0.15);
+            --accent-cyan: #00f0ff;
+            --accent-green: #39ff14;
+            --accent-orange: #ff9d00;
+            --accent-red: #ff3333;
+            --text-primary: #f0f4f8;
+            --text-secondary: #8a99ad;
+            --font-display: 'Orbitron', sans-serif;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+        }
+
+        /* 3D Canvas */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* UI Overlay Layout */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 320px 1fr 360px;
+            grid-template-rows: 70px 1fr 180px;
+            grid-template-areas: 
+                "header header header"
+                "sidebar main details"
+                "bottom bottom details";
+            padding: 15px;
+            gap: 15px;
+        }
+
+        /* Make panels clickable */
+        .interactive-panel {
+            pointer-events: auto;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+
+        .interactive-panel:hover {
+            border-color: rgba(0, 240, 255, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 240, 255, 0.05);
+        }
+
+        /* Header Panel */
+        header {
+            grid-area: header;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 100%;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            fill: var(--accent-cyan);
+            filter: drop-shadow(0 0 8px var(--accent-cyan));
+        }
+
+        .title-container h1 {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #fff, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .title-container p {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        /* Search Section */
+        .search-container {
+            position: relative;
+            width: 350px;
+            pointer-events: auto;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(20, 26, 38, 0.8);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 8px;
+            padding: 8px 12px 8px 35px;
+            color: #fff;
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            width: 14px;
+            height: 14px;
+            fill: var(--text-secondary);
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            background: rgba(12, 16, 23, 0.95);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            margin-top: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .search-item {
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .search-item:hover {
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 0.75rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        /* Sidebar Control Panel */
+        #sidebar {
+            grid-area: sidebar;
+            overflow-y: auto;
+            max-height: calc(100vh - 100px);
+        }
+
+        .panel-title {
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+            padding-bottom: 6px;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: block;
+            font-weight: 500;
+        }
+
+        /* Toggle Buttons */
+        .btn-toggle-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .btn-action {
+            background: rgba(20, 26, 38, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            padding: 8px;
+            font-size: 0.75rem;
+            font-family: var(--font-sans);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-action:hover {
+            background: rgba(0, 240, 255, 0.05);
+            border-color: rgba(0, 240, 255, 0.3);
+        }
+
+        .btn-action.active {
+            background: rgba(0, 240, 255, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            box-shadow: inset 0 0 8px rgba(0, 240, 255, 0.1);
+        }
+
+        /* Sliders */
+        .range-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .range-slider {
+            flex-grow: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            cursor: pointer;
+            box-shadow: 0 0 6px var(--accent-cyan);
+        }
+
+        .slider-val {
+            font-size: 0.75rem;
+            font-family: var(--font-display);
+            width: 45px;
+            text-align: right;
+            color: var(--accent-cyan);
+        }
+
+        /* Checkbox list */
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        /* Details Side Panel */
+        #details-panel {
+            grid-area: details;
+            overflow-y: auto;
+            max-height: calc(100vh - 100px);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            background: rgba(20, 26, 38, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .stat-val {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 2px;
+        }
+
+        .stat-label {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Selected Object Details Card */
+        .object-card {
+            border: 1px dashed rgba(0, 240, 255, 0.2);
+            background: rgba(0, 240, 255, 0.02);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .obj-title {
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            color: #fff;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .obj-status-badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-running {
+            background: rgba(57, 255, 20, 0.15);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .status-idle {
+            background: rgba(255, 157, 0, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid var(--accent-orange);
+        }
+
+        .obj-field {
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .obj-field-name {
+            color: var(--text-secondary);
+        }
+
+        .obj-field-val {
+            font-weight: 500;
+        }
+
+        /* Live Charts Canvas */
+        .chart-container {
+            width: 100%;
+            height: 80px;
+            margin-top: 10px;
+            position: relative;
+            background: rgba(10, 14, 21, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        /* Bottom Log Feed Panel */
+        #bottom-panel {
+            grid-area: bottom;
+            max-height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.72rem;
+            color: #a5b4fc;
+            padding: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .log-item {
+            display: flex;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .log-time {
+            color: var(--accent-cyan);
+            min-width: 75px;
+        }
+
+        .log-tag {
+            color: var(--accent-orange);
+            font-weight: bold;
+        }
+
+        /* Floating Tooltip */
+        #hover-tooltip {
+            position: absolute;
+            background: rgba(11, 14, 20, 0.85);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            color: #fff;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+        }
+
+        #hover-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0;
+            border-style: solid;
+            border-color: var(--accent-cyan) transparent;
+            display: block;
+            width: 0;
+        }
+
+        /* Compass Rose overlay */
+        #compass-rose {
+            position: absolute;
+            bottom: 25px;
+            right: 395px;
+            width: 60px;
+            height: 60px;
+            z-index: 5;
+            pointer-events: none;
+            transform-origin: center center;
+            opacity: 0.8;
+            filter: drop-shadow(0 0 5px rgba(0, 240, 255, 0.3));
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(3px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hide elements dynamically */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 240, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-cyan);
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Floating tooltip for mouse hover -->
+    <div id="hover-tooltip">DD Motor Stator Line</div>
+
+    <!-- Compass SVG -->
+    <svg id="compass-rose" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="45" fill="rgba(10,15,25,0.4)" stroke="rgba(0,240,255,0.3)" stroke-width="2"/>
+        <line x1="50" y1="5" x2="50" y2="95" stroke="rgba(0,240,255,0.15)" stroke-width="1"/>
+        <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(0,240,255,0.15)" stroke-width="1"/>
+        <polygon points="50,15 45,50 50,45" fill="#ff3333"/>
+        <polygon points="50,85 45,50 50,45" fill="#8a99ad"/>
+        <polygon points="50,15 55,50 50,45" fill="#ff4d4d"/>
+        <polygon points="50,85 55,50 50,45" fill="#a5b4fc"/>
+        <text x="50" y="12" font-family="'Orbitron'" font-size="10" fill="#ff3333" font-weight="bold" text-anchor="middle">N</text>
+        <text x="50" y="94" font-family="'Orbitron'" font-size="8" fill="#8a99ad" text-anchor="middle">S</text>
+        <text x="94" y="53" font-family="'Orbitron'" font-size="8" fill="#8a99ad" text-anchor="middle">E</text>
+        <text x="6" y="53" font-family="'Orbitron'" font-size="8" fill="#8a99ad" text-anchor="middle">W</text>
+    </svg>
+
+    <!-- Overlay Panels -->
+    <div class="ui-layer">
+        <!-- Header -->
+        <header class="interactive-panel">
+            <div class="logo-section">
+                <!-- High-tech Logo Icon -->
+                <svg class="logo-icon" viewBox="0 0 24 24">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                </svg>
+                <div class="title-container">
+                    <h1>LGEVH Factory Floor 3D</h1>
+                    <p>Plant 1 & Plant 2 Digital Twin</p>
+                </div>
+            </div>
+
+            <!-- Search Area -->
+            <div class="search-container">
+                <div class="search-input-wrapper">
+                    <!-- Search SVG -->
+                    <svg class="search-icon" viewBox="0 0 24 24">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="Search lines, zones, warehouses..." id="searchBox" oninput="handleSearch()">
+                </div>
+                <div class="search-results" id="searchResults"></div>
+            </div>
+
+            <div class="system-status">
+                <div class="status-dot"></div>
+                <span style="font-family: var(--font-display); letter-spacing: 0.5px;">SYS ACTIVE (100% ACCURACY)</span>
+            </div>
+        </header>
+
+        <!-- Sidebar Control Panel -->
+        <aside id="sidebar" class="interactive-panel">
+            <div class="panel-title">Visualization Controls</div>
+            
+            <div class="control-group">
+                <span class="control-label">View Camera Mode</span>
+                <div class="btn-toggle-group">
+                    <button class="btn-action active" id="btn-perspective" onclick="setCameraMode('perspective')">3D Perspective</button>
+                    <button class="btn-action" id="btn-ortho" onclick="setCameraMode('ortho')">2D Blueprint</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <span class="control-label">Plant Floor Layout</span>
+                <div class="btn-toggle-group" style="grid-template-columns: 1fr 1fr;">
+                    <button class="btn-action active" id="btn-sidebyside" onclick="setLayoutMode('sidebyside')">Side-by-Side</button>
+                    <button class="btn-action" id="btn-stacked" onclick="setLayoutMode('stacked')">Stacked Building</button>
+                </div>
+            </div>
+
+            <div class="control-group" id="explode-group" style="display: none;">
+                <span class="control-label">Building Explode View</span>
+                <div class="range-slider-container">
+                    <input type="range" class="range-slider" id="explodeSlider" min="0" max="30" value="15" step="0.5" oninput="updateExplode(this.value)">
+                    <span class="slider-val" id="explode-val">15.0 m</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <span class="control-label">Active Levels</span>
+                <div class="btn-toggle-group" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <button class="btn-action active" id="btn-floor-all" onclick="setLevelFilter('all')">All</button>
+                    <button class="btn-action" id="btn-floor-p2" onclick="setLevelFilter('p2')">P2-1F</button>
+                    <button class="btn-action" id="btn-floor-p1" onclick="setLevelFilter('p1')">P1-1F</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <span class="control-label">Render Style</span>
+                <div class="btn-toggle-group" style="grid-template-columns: 1fr 1.2fr 1fr;">
+                    <button class="btn-action active" id="btn-style-solid" onclick="setRenderStyle('solid')">Solid</button>
+                    <button class="btn-action" id="btn-style-wire" onclick="setRenderStyle('wireframe')">Cyber-Wire</button>
+                    <button class="btn-action" id="btn-style-tex" onclick="setRenderStyle('texture')">Flat Map</button>
+                </div>
+            </div>
+
+            <div class="panel-title" style="margin-top: 10px;">Layer Visibility</div>
+            <div class="control-group">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-walls" checked onchange="toggleLayer('walls', this.checked)">
+                    <span>Structural Walls</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-columns" checked onchange="toggleLayer('columns', this.checked)">
+                    <span>Structural Columns</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-machinery" checked onchange="toggleLayer('machinery', this.checked)">
+                    <span>Conveyor & Machinery</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-warehouse" checked onchange="toggleLayer('warehouse', this.checked)">
+                    <span>Warehouse Storage</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-offices" checked onchange="toggleLayer('offices', this.checked)">
+                    <span>Office & Cafeteria</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="layer-grid" checked onchange="toggleLayer('grid', this.checked)">
+                    <span>Reference Grid Helper</span>
+                </label>
+            </div>
+
+            <div class="panel-title" style="margin-top: 10px;">Lighting & Simulation</div>
+            <div class="control-group">
+                <span class="control-label">Sun Position (Daylight cycle)</span>
+                <div class="range-slider-container">
+                    <input type="range" class="range-slider" id="timeSlider" min="0" max="24" value="12" step="0.25" oninput="updateTimeOfDay(this.value)">
+                    <span class="slider-val" id="time-val">12:00</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <span class="control-label">Simulation Speed</span>
+                <div class="range-slider-container">
+                    <input type="range" class="range-slider" id="simSpeedSlider" min="0" max="3" value="1" step="0.1" oninput="updateSimSpeed(this.value)">
+                    <span class="slider-val" id="speed-val">1.0x</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Details Panel -->
+        <aside id="details-panel" class="interactive-panel">
+            <div class="panel-title">Production Metrics</div>
+            
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-val" id="stat-oee">84.2%</div>
+                    <div class="stat-label">Overall OEE</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="stat-power">428 kW</div>
+                    <div class="stat-label">Power Load</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="stat-throughput">892 / hr</div>
+                    <div class="stat-label">Combined Output</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="stat-operators">146</div>
+                    <div class="stat-label">Operators Active</div>
+                </div>
+            </div>
+
+            <div id="details-default-view">
+                <div class="panel-title">Plant Inventory Overview</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                    <p style="margin-bottom: 8px;"><strong style="color: #fff;">Plant 1 (P1-1F):</strong> Features main assembly systems. Houses massive conveyor setups for final assembly, component buffer staging, cafeteria, main office suite, and finished goods warehouse racks.</p>
+                    <p><strong style="color: #fff;">Plant 2 (P2-1F):</strong> Motor production hub. Houses DD motor stator assembly ('22.03), DD motor rotor assembly ('22.03), VCC motor assembly sub-lines, WM washing machine sub-lines ('21.10), and secondary finished goods warehouse.</p>
+                </div>
+            </div>
+
+            <!-- Dynamic Details view when item is selected -->
+            <div id="details-active-view" class="hidden">
+                <div class="panel-title">Zone Diagnostics</div>
+                <div class="object-card">
+                    <div class="obj-title">
+                        <span id="obj-name">DD Motor Stator Line</span>
+                        <span class="obj-status-badge status-running" id="obj-status">Running</span>
+                    </div>
+                    <div class="obj-field">
+                        <span class="obj-field-name">Level Location:</span>
+                        <span class="obj-field-val" id="obj-level">P2-1F</span>
+                    </div>
+                    <div class="obj-field">
+                        <span class="obj-field-name">Commission Date:</span>
+                        <span class="obj-field-val" id="obj-commission">March 2022</span>
+                    </div>
+                    <div class="obj-field">
+                        <span class="obj-field-name">Target Rate:</span>
+                        <span class="obj-field-val" id="obj-target">200 units/hr</span>
+                    </div>
+                    <div class="obj-field">
+                        <span class="obj-field-name">Current Rate:</span>
+                        <span class="obj-field-val" id="obj-rate">192 units/hr</span>
+                    </div>
+                    <div class="obj-field">
+                        <span class="obj-field-name">Active Stations:</span>
+                        <span class="obj-field-val" id="obj-stations">12 Stations</span>
+                    </div>
+                    
+                    <span class="control-label" style="margin-top: 12px; margin-bottom: 2px;">Throughput Trend (units/hr)</span>
+                    <div class="chart-container">
+                        <canvas id="details-chart" width="310" height="80"></canvas>
+                    </div>
+                </div>
+                <button class="btn-action" style="width:100%; margin-top:10px; border-color:rgba(0, 240, 255, 0.4);" onclick="deselectObject()">Reset Camera Target</button>
+            </div>
+        </aside>
+
+        <!-- Bottom Log panel -->
+        <footer id="bottom-panel" class="interactive-panel">
+            <div class="panel-title" style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+                <span>Live Factory Telemetry Stream</span>
+                <span style="font-size:0.65rem; color: var(--accent-cyan); font-family: monospace;">BUFFER: OK</span>
+            </div>
+            <div class="log-list" id="logList">
+                <div class="log-item">
+                    <span class="log-time">[11:45:00]</span>
+                    <span class="log-tag">[SYSTEM]</span>
+                    <span>3D Digital Twin environment successfully initialized. Ground texture loaded.</span>
+                </div>
+                <div class="log-item">
+                    <span class="log-time">[11:45:03]</span>
+                    <span class="log-tag">[TELEMETRY]</span>
+                    <span>Conveyor box streams active. Robotic assembly cells running.</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Load Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // --- DATA CATALOG ---
+        const zoneData = {
+            "p2-stator": {
+                name: "DD Motor Stator Line ('22.03)",
+                level: "P2-1F",
+                commission: "March 2022",
+                target: "210 units/hr",
+                rate: "198 units/hr",
+                stations: "10 active modules",
+                status: "running",
+                desc: "High-precision automated stator winding and insulation inserter line.",
+                pos: {x: -20, y: 0.5, z: -10},
+                camOffset: {x: -20, y: 12, z: -2}
+            },
+            "p2-rotor": {
+                name: "DD Motor Rotor Line ('22.03)",
+                level: "P2-1F",
+                commission: "March 2022",
+                target: "180 units/hr",
+                rate: "172 units/hr",
+                stations: "8 automated cells",
+                status: "running",
+                desc: "Rotor magnet insertion, balancing, and shaft assembly operations.",
+                pos: {x: -20, y: 0.5, z: -5},
+                camOffset: {x: -20, y: 12, z: 3}
+            },
+            "p2-wm": {
+                name: "WM Sub Line ('21.10)",
+                level: "P2-1F",
+                commission: "October 2021",
+                target: "150 units/hr",
+                rate: "148 units/hr",
+                stations: "16 conveyor stations",
+                status: "running",
+                desc: "Washing machine tub and outer drum sub-assembly loop.",
+                pos: {x: -18, y: 0.5, z: 9},
+                camOffset: {x: -18, y: 16, z: 22}
+            },
+            "p2-vcc": {
+                name: "VCC Motor Line (TBD)",
+                level: "P2-1F",
+                commission: "Planned Q4 2026",
+                target: "250 units/hr",
+                rate: "0 units/hr (Setup)",
+                stations: "Under Construction",
+                status: "idle",
+                desc: "Variable Speed Compressor motor line. Tooling installation phase.",
+                pos: {x: 10, y: 0.5, z: 0},
+                camOffset: {x: 10, y: 14, z: 12}
+            },
+            "p2-warehouse": {
+                name: "P2 Finish Good Warehouse",
+                level: "P2-1F",
+                commission: "N/A",
+                target: "Staging capacity: 450 pallets",
+                rate: "Utilization: 78%",
+                stations: "4 high-rack corridors",
+                status: "running",
+                desc: "Staging warehouse for completed motors prior to transport to Plant 1.",
+                pos: {x: 35, y: 0.5, z: 0},
+                camOffset: {x: 35, y: 18, z: 15}
+            },
+            "p1-assembly": {
+                name: "P1 Main Assembly Lines",
+                level: "P1-1F",
+                commission: "Active Expansion",
+                target: "350 products/hr",
+                rate: "318 products/hr",
+                stations: "6 parallel conveyor systems",
+                status: "running",
+                desc: "Primary assembly hall for completed home appliances. Heavy robotic cells.",
+                pos: {x: 5, y: 0.5, z: 3},
+                camOffset: {x: 5, y: 18, z: 20}
+            },
+            "p1-warehouse": {
+                name: "P1 Finish Good Warehouse",
+                level: "P1-1F",
+                commission: "N/A",
+                target: "Staging capacity: 1200 pallets",
+                rate: "Utilization: 64%",
+                stations: "3 heavy-rack corridors",
+                status: "running",
+                desc: "Primary finished goods staging warehouse with direct truck loading bay access.",
+                pos: {x: 38, y: 0.5, z: 6},
+                camOffset: {x: 38, y: 18, z: 22}
+            },
+            "p1-offices": {
+                name: "P1 Operations Admin & Meeting Rooms",
+                level: "P1-1F",
+                commission: "N/A",
+                target: "Cap: 80 desks",
+                rate: "Occupancy: 85%",
+                stations: "Office & Meeting layout",
+                status: "running",
+                desc: "Central office suites for management, quality assurance control room, and conference spaces.",
+                pos: {x: -33, y: 0.5, z: 8},
+                camOffset: {x: -33, y: 12, z: 18}
+            },
+            "p1-cafeteria": {
+                name: "P1 Employee Cafeteria & Diner",
+                level: "P1-1F",
+                commission: "N/A",
+                target: "Cap: 240 seats",
+                rate: "Shift occupancy active",
+                stations: "Dining & Rest Hall",
+                status: "running",
+                desc: "Employee dining zone situated at the bottom-left area of Plant 1.",
+                pos: {x: -33, y: 0.5, z: -10},
+                camOffset: {x: -33, y: 12, z: -2}
+            }
+        };
+
+        // Search options lookup
+        const searchOptions = Object.keys(zoneData).map(key => ({
+            id: key,
+            name: zoneData[key].name,
+            level: zoneData[key].level
+        }));
+
+        // --- GLOBAL THREE.JS VARIABLES ---
+        let scene, camera, renderer, controls;
+        let ambientLight, sunLight;
+        let p1Group, p2Group;
+        let corridorMesh, gridHelper;
+        let materials = {};
+        let boxesArray = []; // animated products
+        let robotsArray = []; // animated robots
+        let statusLights = []; // animated lights
+
+        // Application State
+        const state = {
+            viewMode: 'perspective', // 'perspective' or 'ortho'
+            layoutMode: 'sidebyside', // 'sidebyside' or 'stacked'
+            explodeDist: 15.0,
+            levelFilter: 'all', // 'all', 'p1', 'p2'
+            renderStyle: 'solid', // 'solid', 'wireframe', 'texture'
+            simSpeed: 1.0,
+            timeOfDay: 12.0, // 0 to 24
+            activeSelection: null,
+            visibleLayers: {
+                walls: true,
+                columns: true,
+                machinery: true,
+                warehouse: true,
+                offices: true,
+                grid: true
+            }
+        };
+
+        // Smooth Interpolation Targets
+        const interp = {
+            p1Pos: new THREE.Vector3(0, 0, 19.5),
+            p2Pos: new THREE.Vector3(0, 0, -19.5),
+            p1Opacity: 1.0,
+            p2Opacity: 1.0,
+            cameraTarget: new THREE.Vector3(0, 0, 0),
+            cameraPos: null,
+            isTransitioningCamera: false,
+            transitionProgress: 0.0
+        };
+
+        // Interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredObjectId = null;
+        let clickableObjects = [];
+
+        // Chart details
+        let chartInterval = null;
+        const chartData = [185, 188, 190, 187, 195, 192, 198];
+
+        // --- INITIALIZATION ---
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Scene & Fog
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0c10);
+            scene.fog = new THREE.FogExp2(0x0a0c10, 0.007);
+
+            // Camera Setup
+            camera = new THREE.PerspectiveCamera(40, width / height, 1, 1000);
+            camera.position.set(0, 75, 90);
+
+            // Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02; // prevent going below floor
+            controls.minDistance = 10;
+            controls.maxDistance = 250;
+            controls.target.set(0, 0, 0);
+
+            // Lights
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            sunLight.position.set(60, 80, 40);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 200;
+            const d = 60;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            sunLight.shadow.bias = -0.0005;
+            scene.add(sunLight);
+
+            // Internal overhead structures
+            const overheadLightHelper = new THREE.Group();
+            scene.add(overheadLightHelper);
+
+            // Grid Helper
+            gridHelper = new THREE.GridHelper(160, 80, 0x00f0ff, 0x1f2b3c);
+            gridHelper.position.y = -0.05;
+            scene.add(gridHelper);
+
+            // Create Groups for P1 and P2
+            p1Group = new THREE.Group();
+            p2Group = new THREE.Group();
+            scene.add(p1Group);
+            scene.add(p2Group);
+
+            // Establish coordinate system offsets
+            // Each plane is 100x37
+            p1Group.position.copy(interp.p1Pos);
+            p2Group.position.copy(interp.p2Pos);
+
+            // Create materials
+            initMaterials();
+
+            // Load Textures and create ground planes
+            loadGroundPlanes();
+
+            // Build structural components
+            buildStructure(p1Group, "p1");
+            buildStructure(p2Group, "p2");
+
+            // Build specific zones
+            buildP2Zones();
+            buildP1Zones();
+
+            // Create central pathway connecting them (only visible in side-by-side mode)
+            const pathwayGeo = new THREE.PlaneGeometry(100, 2);
+            pathwayGeo.rotateX(-Math.PI / 2);
+            corridorMesh = new THREE.Mesh(pathwayGeo, new THREE.MeshStandardMaterial({
+                color: 0x181e28,
+                roughness: 0.9,
+                metalness: 0.1
+            }));
+            corridorMesh.position.set(0, -0.02, 0);
+            corridorMesh.receiveShadow = true;
+            scene.add(corridorMesh);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('click', onClick);
+
+            // Cache original materials for wireframe/render style toggling
+            const cacheMaterials = (node) => {
+                if (node.isMesh) {
+                    node.userData.originalMaterial = node.material;
+                    node.userData.colorHex = node.material.color ? node.material.color.getHex() : 0x00f0ff;
+                }
+            };
+            p1Group.traverse(cacheMaterials);
+            p2Group.traverse(cacheMaterials);
+
+            // Setup chart & log interval
+            initTelemetry();
+        }
+
+        // --- MATERIALS SETUP ---
+        function initMaterials() {
+            materials.transparentWall = new THREE.MeshPhysicalMaterial({
+                color: 0x00f0ff,
+                transparent: true,
+                opacity: 0.25,
+                roughness: 0.1,
+                metalness: 0.8,
+                clearcoat: 1.0,
+                clearcoatRoughness: 0.1,
+                side: THREE.DoubleSide
+            });
+
+            materials.wireframeWall = new THREE.MeshBasicMaterial({
+                color: 0x00f0ff,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.4
+            });
+
+            materials.column = new THREE.MeshStandardMaterial({
+                color: 0x242d38,
+                roughness: 0.6,
+                metalness: 0.7
+            });
+
+            materials.conveyor = new THREE.MeshStandardMaterial({
+                color: 0x1e2430,
+                roughness: 0.4,
+                metalness: 0.8
+            });
+
+            materials.belt = new THREE.MeshStandardMaterial({
+                color: 0x0a0c10,
+                roughness: 0.9,
+                metalness: 0.0
+            });
+
+            materials.steel = new THREE.MeshStandardMaterial({
+                color: 0x7a8a9e,
+                roughness: 0.3,
+                metalness: 0.9
+            });
+
+            materials.yellowFence = new THREE.MeshStandardMaterial({
+                color: 0xffcc00,
+                roughness: 0.5,
+                metalness: 0.2,
+                transparent: true,
+                opacity: 0.5,
+                side: THREE.DoubleSide
+            });
+
+            materials.officeWood = new THREE.MeshStandardMaterial({
+                color: 0x7c5d41,
+                roughness: 0.6,
+                metalness: 0.1
+            });
+
+            materials.officePlastic = new THREE.MeshStandardMaterial({
+                color: 0x3d4856,
+                roughness: 0.5,
+                metalness: 0.4
+            });
+
+            materials.officeBlue = new THREE.MeshStandardMaterial({
+                color: 0x1b4f72,
+                roughness: 0.6,
+                metalness: 0.3
+            });
+        }
+
+        // --- GROUND PLANES TEXTURE LOADING ---
+        function loadGroundPlanes() {
+            const textureLoader = new THREE.TextureLoader();
+            textureLoader.load('floorplan.png', function(texture) {
+                texture.minFilter = THREE.LinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+
+                // Texture mapping for P1-1F (Bottom half of image)
+                const textureP1 = texture.clone();
+                textureP1.needsUpdate = true;
+                textureP1.repeat.set(1, 0.5);
+                textureP1.offset.set(0, 0);
+
+                const planeP1Geo = new THREE.PlaneGeometry(100, 37);
+                planeP1Geo.rotateX(-Math.PI / 2);
+                const planeP1Mat = new THREE.MeshStandardMaterial({
+                    map: textureP1,
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+                const planeP1 = new THREE.Mesh(planeP1Geo, planeP1Mat);
+                planeP1.receiveShadow = true;
+                p1Group.add(planeP1);
+
+                // Texture mapping for P2-1F (Top half of image)
+                const textureP2 = texture.clone();
+                textureP2.needsUpdate = true;
+                textureP2.repeat.set(1, 0.5);
+                textureP2.offset.set(0, 0.5);
+
+                const planeP2Geo = new THREE.PlaneGeometry(100, 37);
+                planeP2Geo.rotateX(-Math.PI / 2);
+                const planeP2Mat = new THREE.MeshStandardMaterial({
+                    map: textureP2,
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+                const planeP2 = new THREE.Mesh(planeP2Geo, planeP2Mat);
+                planeP2.receiveShadow = true;
+                p2Group.add(planeP2);
+            }, undefined, function(err) {
+                console.error("Failed to load floorplan.png, initializing with colored blueprints instead.");
+                // Fallback geometries if texture load fails
+                const planeP1Geo = new THREE.PlaneGeometry(100, 37);
+                planeP1Geo.rotateX(-Math.PI / 2);
+                const planeP1 = new THREE.Mesh(planeP1Geo, new THREE.MeshStandardMaterial({ color: 0x111622 }));
+                planeP1.receiveShadow = true;
+                p1Group.add(planeP1);
+
+                const planeP2Geo = new THREE.PlaneGeometry(100, 37);
+                planeP2Geo.rotateX(-Math.PI / 2);
+                const planeP2 = new THREE.Mesh(planeP2Geo, new THREE.MeshStandardMaterial({ color: 0x151b2a }));
+                planeP2.receiveShadow = true;
+                p2Group.add(planeP2);
+            });
+        }
+
+        // --- BUILDING GENERIC STRUCTURES (WALLS, COLUMNS) ---
+        function buildStructure(group, levelId) {
+            const structureGroup = new THREE.Group();
+            structureGroup.name = "structure-layers";
+            group.add(structureGroup);
+
+            // 1. Perimeter Walls
+            const wallH = 2.0;
+            const wallT = 0.3;
+            const wallsGroup = new THREE.Group();
+            wallsGroup.name = "layer-walls";
+            structureGroup.add(wallsGroup);
+
+            // Wall meshes (P1/P2 same size)
+            // Left, Right, Top, Bottom
+            const wLeft = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, 37), materials.transparentWall);
+            wLeft.position.set(-50, wallH/2, 0);
+            wLeft.castShadow = true;
+            wallsGroup.add(wLeft);
+
+            const wRight = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, 37), materials.transparentWall);
+            wRight.position.set(50, wallH/2, 0);
+            wRight.castShadow = true;
+            wallsGroup.add(wRight);
+
+            const wTop = new THREE.Mesh(new THREE.BoxGeometry(100, wallH, wallT), materials.transparentWall);
+            wTop.position.set(0, wallH/2, -18.5);
+            wTop.castShadow = true;
+            wallsGroup.add(wTop);
+
+            const wBottom = new THREE.Mesh(new THREE.BoxGeometry(100, wallH, wallT), materials.transparentWall);
+            wBottom.position.set(0, wallH/2, 18.5);
+            wBottom.castShadow = true;
+            wallsGroup.add(wBottom);
+
+            // Add metal framing corners for aesthetics
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a3746, roughness: 0.3, metalness: 0.8 });
+            const corners = [
+                {x: -50, z: -18.5}, {x: 50, z: -18.5},
+                {x: -50, z: 18.5}, {x: 50, z: 18.5}
+            ];
+            corners.forEach(c => {
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, wallH + 0.2, 8), frameMat);
+                pole.position.set(c.x, wallH/2, c.z);
+                wallsGroup.add(pole);
+            });
+
+            // 2. Structural Column Grid
+            const columnsGroup = new THREE.Group();
+            columnsGroup.name = "layer-columns";
+            structureGroup.add(columnsGroup);
+
+            const colH = 5.0;
+            const colW = 0.5;
+            // Place columns on a grid
+            for (let x = -40; x <= 40; x += 16) {
+                for (let z = -12; z <= 12; z += 8) {
+                    // Skip columns that overlap with central equipment areas if needed
+                    const col = new THREE.Mesh(new THREE.BoxGeometry(colW, colH, colW), materials.column);
+                    col.position.set(x, colH/2, z);
+                    col.castShadow = true;
+                    col.receiveShadow = true;
+                    columnsGroup.add(col);
+                }
+            }
+        }
+
+        // --- ZONE BUILDERS: PLANT 2 ---
+        function buildP2Zones() {
+            const machineryGroup = new THREE.Group();
+            machineryGroup.name = "layer-machinery";
+            p2Group.add(machineryGroup);
+
+            const warehouseGroup = new THREE.Group();
+            warehouseGroup.name = "layer-warehouse";
+            p2Group.add(warehouseGroup);
+
+            const officesGroup = new THREE.Group();
+            officesGroup.name = "layer-offices";
+            p2Group.add(officesGroup);
+
+            // A. DD Motor Stator Line ('22.03)
+            const statorLine = createConveyorLine(30, 2, 0.8, 0x10b981, "p2-stator");
+            statorLine.position.set(-20, 0, -10);
+            machineryGroup.add(statorLine);
+            addZoneInteractVolume(p2Group, "p2-stator", -20, 0.8, -10, 32, 2, 6);
+
+            // B. DD Motor Rotor Line ('22.03)
+            const rotorLine = createConveyorLine(30, 2, 0.8, 0x059669, "p2-rotor");
+            rotorLine.position.set(-20, 0, -5);
+            machineryGroup.add(rotorLine);
+            addZoneInteractVolume(p2Group, "p2-rotor", -20, 0.8, -5, 32, 2, 6);
+
+            // C. WM Sub Line ('21.10)
+            // Complex winding conveyor loop
+            const wmLoop = new THREE.Group();
+            wmLoop.position.set(-18, 0, 9);
+            const wmSegment1 = createConveyor(30, 1.8, 0.8);
+            wmSegment1.position.set(0, 0, 0);
+            wmLoop.add(wmSegment1);
+
+            const wmSegment2 = createConveyor(10, 1.8, 0.8);
+            wmSegment2.rotateY(Math.PI / 2);
+            wmSegment2.position.set(15, 0, 4);
+            wmLoop.add(wmSegment2);
+
+            const wmSegment3 = createConveyor(30, 1.8, 0.8);
+            wmSegment3.position.set(0, 0, 8);
+            wmLoop.add(wmSegment3);
+
+            // Add robot to WM line
+            const wmRob1 = createRobotArm(-5, 0.8, 4);
+            wmLoop.add(wmRob1);
+            const wmRob2 = createRobotArm(8, 0.8, 4);
+            wmLoop.add(wmRob2);
+
+            // Simulated boxes for WM line
+            addBoxFlow(wmLoop, 30, 0.8, 0, 15, "x", 0.04);
+            addBoxFlow(wmLoop, 30, 0.8, 8, 15, "x", -0.04);
+
+            // Add blinking light
+            addStatusLight(wmLoop, 0, 3.0, 4, 0x00ffff);
+
+            machineryGroup.add(wmLoop);
+            addZoneInteractVolume(p2Group, "p2-wm", -18, 1.0, 13, 34, 3, 14);
+
+            // D. VCC Motor Line
+            const vccZone = new THREE.Group();
+            vccZone.position.set(10, 0, 0);
+            for (let x = -8; x <= 8; x += 5) {
+                for (let z = -5; z <= 5; z += 5) {
+                    const bench = createAssemblyBench(x, z);
+                    vccZone.add(bench);
+                }
+            }
+            // Add yellow safety fences
+            const fenceFront = new THREE.Mesh(new THREE.BoxGeometry(20, 1.2, 0.05), materials.yellowFence);
+            fenceFront.position.set(0, 0.6, 7);
+            vccZone.add(fenceFront);
+            const fenceBack = new THREE.Mesh(new THREE.BoxGeometry(20, 1.2, 0.05), materials.yellowFence);
+            fenceBack.position.set(0, 0.6, -7);
+            vccZone.add(fenceBack);
+
+            addStatusLight(vccZone, 0, 2.5, 0, 0xffaa00); // idle status light
+
+            machineryGroup.add(vccZone);
+            addZoneInteractVolume(p2Group, "p2-vcc", 10, 0.8, 0, 22, 2, 16);
+
+            // E. P2 Finish Good Warehouse
+            const p2Warehouse = createWarehouse(4, 25, 0x1f51fd);
+            p2Warehouse.position.set(35, 0, 0);
+            warehouseGroup.add(p2Warehouse);
+            addZoneInteractVolume(p2Group, "p2-warehouse", 35, 2.0, 0, 25, 6, 30);
+
+            // F. Offices (top-left border rooms)
+            const officeWalls = new THREE.Group();
+            const w1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.8, 14), new THREE.MeshStandardMaterial({color: 0x475569}));
+            w1.position.set(-42, 0.9, -11);
+            officeWalls.add(w1);
+            const w2 = new THREE.Mesh(new THREE.BoxGeometry(8, 1.8, 0.2), new THREE.MeshStandardMaterial({color: 0x475569}));
+            w2.position.set(-46, 0.9, -4);
+            officeWalls.add(w2);
+
+            // Desks in Office
+            for (let x = -48; x <= -44; x += 3) {
+                for (let z = -15; z <= -8; z += 3) {
+                    const desk = createOfficeDesk(x, z, 0);
+                    officeWalls.add(desk);
+                }
+            }
+            officesGroup.add(officeWalls);
+        }
+
+        // --- ZONE BUILDERS: PLANT 1 ---
+        function buildP1Zones() {
+            const machineryGroup = new THREE.Group();
+            machineryGroup.name = "layer-machinery";
+            p1Group.add(machineryGroup);
+
+            const warehouseGroup = new THREE.Group();
+            warehouseGroup.name = "layer-warehouse";
+            p1Group.add(warehouseGroup);
+
+            const officesGroup = new THREE.Group();
+            officesGroup.name = "layer-offices";
+            p1Group.add(officesGroup);
+
+            // A. P1 Main Assembly Lines
+            // 6 long parallel conveyors representing dense main line
+            const assemblyHall = new THREE.Group();
+            assemblyHall.position.set(5, 0, 3);
+            
+            const lineZOffsets = [-10, -5, 0, 5, 10];
+            lineZOffsets.forEach((zOffset, index) => {
+                const line = createConveyor(42, 1.8, 0.8);
+                line.position.set(0, 0, zOffset);
+                assemblyHall.add(line);
+
+                // Add robotic arm alongside conveyors
+                const armX = index % 2 === 0 ? -12 : 12;
+                const arm = createRobotArm(armX, 0.8, zOffset - 0.9);
+                assemblyHall.add(arm);
+
+                // Add moving boxes on conveyors
+                addBoxFlow(assemblyHall, 42, 0.8, zOffset, 15, "x", (index % 2 === 0 ? 0.05 : -0.05));
+
+                // Blinking green lights
+                addStatusLight(assemblyHall, 20, 2.8, zOffset, 0x39ff14);
+            });
+
+            // Overhead steel trusses for aesthetics
+            for (let xOffset = -18; xOffset <= 18; xOffset += 12) {
+                const truss = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 26), materials.steel);
+                truss.position.set(xOffset, 4.5, 0);
+                assemblyHall.add(truss);
+
+                const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4.5, 8), materials.steel);
+                leftLeg.position.set(xOffset, 2.25, -13);
+                assemblyHall.add(leftLeg);
+
+                const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4.5, 8), materials.steel);
+                rightLeg.position.set(xOffset, 2.25, 13);
+                assemblyHall.add(rightLeg);
+            }
+
+            machineryGroup.add(assemblyHall);
+            addZoneInteractVolume(p1Group, "p1-assembly", 5, 2.0, 3, 46, 5, 28);
+
+            // B. P1 Finished Goods Warehouse (Right side)
+            const p1Warehouse = createWarehouse(3, 22, 0xff5b1e);
+            p1Warehouse.position.set(38, 0, 6);
+            warehouseGroup.add(p1Warehouse);
+            addZoneInteractVolume(p1Group, "p1-warehouse", 38, 2.0, 6, 22, 6, 26);
+
+            // C. P1 Admin Offices (Bottom-left & Center-left)
+            const adminSuite = new THREE.Group();
+            adminSuite.position.set(-33, 0, 8);
+            
+            // Layout walls
+            const wallMat = new THREE.MeshStandardMaterial({color: 0x515f72, roughness: 0.7});
+            const w1 = new THREE.Mesh(new THREE.BoxGeometry(25, 1.8, 0.2), wallMat);
+            w1.position.set(0, 0.9, -10);
+            adminSuite.add(w1);
+            const w2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.8, 20), wallMat);
+            w2.position.set(12.5, 0.9, 0);
+            adminSuite.add(w2);
+
+            // Inner office partitions
+            const inner1 = new THREE.Mesh(new THREE.BoxGeometry(8, 1.8, 0.15), new THREE.MeshStandardMaterial({color: 0x94a3b8, transparent: true, opacity: 0.6}));
+            inner1.position.set(-8.5, 0.9, 0);
+            adminSuite.add(inner1);
+
+            // Desks
+            for (let x = -10; x <= 8; x += 4) {
+                for (let z = -6; z <= 6; z += 4) {
+                    const desk = createOfficeDesk(x, z, Math.PI / 2);
+                    adminSuite.add(desk);
+                }
+            }
+
+            // Conference Room
+            const confTable = new THREE.Mesh(new THREE.BoxGeometry(5, 0.75, 2), materials.officeWood);
+            confTable.position.set(-8, 0.38, -5);
+            confTable.castShadow = true;
+            adminSuite.add(confTable);
+            for (let theta = 0; theta < Math.PI * 2; theta += Math.PI / 3) {
+                const cx = -8 + 1.8 * Math.cos(theta);
+                const cz = -5 + 1.2 * Math.sin(theta);
+                const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), materials.officePlastic);
+                chair.position.set(cx, 0.4, cz);
+                chair.rotation.y = -theta + Math.PI / 2;
+                adminSuite.add(chair);
+            }
+
+            officesGroup.add(adminSuite);
+            addZoneInteractVolume(p1Group, "p1-offices", -33, 1.0, 8, 26, 2, 22);
+
+            // D. P1 Employee Cafeteria (Bottom-left area)
+            const cafeteria = new THREE.Group();
+            cafeteria.position.set(-33, 0, -10);
+
+            // 6 Long dining tables and chairs
+            for (let z = -5; z <= 5; z += 4) {
+                const table = new THREE.Mesh(new THREE.BoxGeometry(10, 0.75, 1.2), new THREE.MeshStandardMaterial({color: 0xccd1d9, roughness: 0.4}));
+                table.position.set(0, 0.38, z);
+                table.castShadow = true;
+                cafeteria.add(table);
+
+                // Chairs along side table
+                for (let x = -4; x <= 4; x += 1.5) {
+                    const chair1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.4), materials.officePlastic);
+                    chair1.position.set(x, 0.3, z - 0.9);
+                    cafeteria.add(chair1);
+
+                    const chair2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.4), materials.officePlastic);
+                    chair2.position.set(x, 0.3, z + 0.9);
+                    cafeteria.add(chair2);
+                }
+            }
+
+            officesGroup.add(cafeteria);
+            addZoneInteractVolume(p1Group, "p1-cafeteria", -33, 1.0, -10, 20, 2, 14);
+        }
+
+        // --- HELPER COMPONENT BUILDERS ---
+
+        // Bounding Volume for Raycast Click and Selection
+        function addZoneInteractVolume(group, zoneId, x, y, z, w, h, d) {
+            const geom = new THREE.BoxGeometry(w, h, d);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0x00f0ff,
+                transparent: true,
+                opacity: 0.0, // completely invisible but raycastable
+                depthWrite: false
+            });
+            const volume = new THREE.Mesh(geom, mat);
+            volume.position.set(x, y, z);
+            volume.userData = { isInteractVolume: true, zoneId: zoneId };
+            group.add(volume);
+            clickableObjects.push(volume);
+        }
+
+        // Conveyor Line with rollers detail
+        function createConveyorLine(length, width, height, colorHex, zoneId) {
+            const group = new THREE.Group();
+            const frame = createConveyor(length, width, height);
+            group.add(frame);
+
+            // Add specialized equipment cages
+            const cageMat = new THREE.MeshStandardMaterial({color: 0x334155, roughness: 0.4, metalness: 0.7});
+            const cageGeo = new THREE.BoxGeometry(4, 2.5, width + 0.4);
+            const cage = new THREE.Mesh(cageGeo, cageMat);
+            cage.position.set(-length/4, height + 1.25, 0);
+            cage.castShadow = true;
+            group.add(cage);
+
+            const screen = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.1), new THREE.MeshBasicMaterial({color: 0x00f0ff}));
+            screen.position.set(-length/4, height + 1.5, width/2 + 0.25);
+            screen.rotation.y = 0.2;
+            group.add(screen);
+
+            // Robotic arm
+            const arm = createRobotArm(length/4, height, -width/2 - 0.2);
+            group.add(arm);
+
+            // Status light
+            addStatusLight(group, 0, height + 1.5, 0, colorHex);
+
+            // Moving products flow
+            addBoxFlow(group, length, height, 0, 10, "x", 0.05);
+
+            return group;
+        }
+
+        function createConveyor(length, width, height) {
+            const group = new THREE.Group();
+            const frameGeo = new THREE.BoxGeometry(length, height - 0.1, width);
+            const frame = new THREE.Mesh(frameGeo, materials.conveyor);
+            frame.position.y = height/2;
+            frame.castShadow = true;
+            frame.receiveShadow = true;
+            group.add(frame);
+
+            // Belt surface
+            const beltGeo = new THREE.BoxGeometry(length - 0.2, 0.05, width - 0.1);
+            const belt = new THREE.Mesh(beltGeo, materials.belt);
+            belt.position.y = height;
+            group.add(belt);
+
+            // Supporting structural legs
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.08, height, 8);
+            for (let x = -length/2 + 1; x <= length/2 - 1; x += length/4) {
+                const legLeft = new THREE.Mesh(legGeo, materials.steel);
+                legLeft.position.set(x, height/2, -width/2 + 0.1);
+                legLeft.castShadow = true;
+                group.add(legLeft);
+
+                const legRight = new THREE.Mesh(legGeo, materials.steel);
+                legRight.position.set(x, height/2, width/2 - 0.1);
+                legRight.castShadow = true;
+                group.add(legRight);
+            }
+            return group;
+        }
+
+        // Robotic Arm assembly component
+        function createRobotArm(x, y, z) {
+            const group = new THREE.Group();
+            group.position.set(x, y, z);
+            group.name = "robot-arm";
+
+            // Base
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.6, 12), materials.steel);
+            base.position.y = 0.3;
+            base.castShadow = true;
+            group.add(base);
+
+            // Shoulder Joint pivot
+            const joint1 = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshStandardMaterial({color: 0xef4444}));
+            joint1.position.y = 0.6;
+            group.add(joint1);
+
+            // Lower Arm link
+            const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.2, 8), materials.steel);
+            arm1.position.y = 1.2;
+            arm1.castShadow = true;
+            group.add(arm1);
+
+            // Elbow Joint
+            const joint2 = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 12), new THREE.MeshStandardMaterial({color: 0xef4444}));
+            joint2.position.y = 1.8;
+            group.add(joint2);
+
+            // Upper Arm link
+            const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.0, 8), materials.steel);
+            arm2.position.y = 2.3;
+            arm2.rotation.z = Math.PI / 4;
+            arm2.castShadow = true;
+            group.add(arm2);
+
+            // Tool Head
+            const gripper = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), materials.officePlastic);
+            gripper.position.set(0.35, 2.7, 0);
+            group.add(gripper);
+
+            // Register robot for loop animations
+            robotsArray.push({
+                group: group,
+                arm2: arm2,
+                gripper: gripper,
+                baseRotSpeed: 0.5 + Math.random() * 0.5,
+                jointRotSpeed: 0.8 + Math.random() * 0.4
+            });
+
+            return group;
+        }
+
+        // Conveyor Product Boxes Flow Simulation
+        function addBoxFlow(parentGroup, length, height, zCoord, count, axis, speed) {
+            const spacing = length / count;
+            for (let i = 0; i < count; i++) {
+                const boxGeo = new THREE.BoxGeometry(0.8, 0.6, 0.8);
+                // Random box materials
+                const boxMat = new THREE.MeshStandardMaterial({
+                    color: [0xd2b48c, 0xc084fc, 0x60a5fa, 0xf87171, 0x34d399][Math.floor(Math.random() * 5)],
+                    roughness: 0.8
+                });
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                
+                // Position initial spacing
+                const initialVal = -length/2 + i * spacing;
+                if (axis === "x") {
+                    box.position.set(initialVal, height + 0.3, zCoord);
+                } else {
+                    box.position.set(zCoord, height + 0.3, initialVal);
+                }
+                box.castShadow = true;
+                parentGroup.add(box);
+
+                boxesArray.push({
+                    mesh: box,
+                    minCoord: -length/2 + 0.2,
+                    maxCoord: length/2 - 0.2,
+                    speed: speed,
+                    axis: axis,
+                    zCoord: zCoord
+                });
+            }
+        }
+
+        // Status beacon tower
+        function addStatusLight(parentGroup, x, y, z, colorHex) {
+            const group = new THREE.Group();
+            group.position.set(x, y, z);
+
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), materials.steel);
+            pole.position.y = 0.6;
+            group.add(pole);
+
+            const beaconGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8);
+            const beaconMat = new THREE.MeshBasicMaterial({color: colorHex});
+            const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+            beacon.position.y = 1.25;
+            group.add(beacon);
+
+            // Add real PointLight sources to cast light at night
+            const pLight = new THREE.PointLight(colorHex, 0.0, 5);
+            pLight.position.y = 1.25;
+            group.add(pLight);
+
+            statusLights.push({
+                beacon: beacon,
+                light: pLight,
+                color: colorHex,
+                baseColor: new THREE.Color(colorHex)
+            });
+
+            parentGroup.add(group);
+        }
+
+        // Warehouse Racks
+        function createWarehouse(numRacks, length, highlightColor) {
+            const group = new THREE.Group();
+
+            const rackH = 4.5;
+            const rackW = 1.6;
+            const blueMat = new THREE.MeshStandardMaterial({color: 0x1d4ed8, roughness: 0.4, metalness: 0.6});
+            const orangeMat = new THREE.MeshStandardMaterial({color: 0xf97316, roughness: 0.4, metalness: 0.6});
+            const woodMat = new THREE.MeshStandardMaterial({color: 0xa16207, roughness: 0.8});
+
+            for (let r = 0; r < numRacks; r++) {
+                const zOffset = -10 + r * 7;
+                const rackGroup = new THREE.Group();
+                rackGroup.position.z = zOffset;
+
+                // Shelving structural frames
+                for (let x = -length/2; x <= length/2; x += 4) {
+                    // Left frame post
+                    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, rackH, 0.12), blueMat);
+                    p1.position.set(x, rackH/2, -rackW/2);
+                    p1.castShadow = true;
+                    rackGroup.add(p1);
+
+                    // Right frame post
+                    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, rackH, 0.12), blueMat);
+                    p2.position.set(x, rackH/2, rackW/2);
+                    p2.castShadow = true;
+                    rackGroup.add(p2);
+
+                    // Cross diagonal bracing
+                    const diag = new THREE.Mesh(new THREE.BoxGeometry(0.06, rackH + 0.5, 0.06), blueMat);
+                    diag.position.set(x, rackH/2, 0);
+                    diag.rotation.z = Math.PI/6;
+                    rackGroup.add(diag);
+                }
+
+                // Shelving Levels (beams & boards)
+                const shelfYOffsets = [0.2, 1.6, 3.0, 4.4];
+                shelfYOffsets.forEach(y => {
+                    // Front load beam
+                    const beam1 = new THREE.Mesh(new THREE.BoxGeometry(length, 0.12, 0.12), orangeMat);
+                    beam1.position.set(0, y, -rackW/2);
+                    beam1.castShadow = true;
+                    rackGroup.add(beam1);
+
+                    // Back load beam
+                    const beam2 = new THREE.Mesh(new THREE.BoxGeometry(length, 0.12, 0.12), orangeMat);
+                    beam2.position.set(0, y, rackW/2);
+                    beam2.castShadow = true;
+                    rackGroup.add(beam2);
+
+                    // Wood deck board panels
+                    for (let xBoard = -length/2 + 2; xBoard <= length/2 - 2; xBoard += 4) {
+                        const board = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.05, rackW), woodMat);
+                        board.position.set(xBoard, y + 0.02, 0);
+                        board.receiveShadow = true;
+                        rackGroup.add(board);
+
+                        // Randomly stock pallets / boxes on shelves
+                        if (y < 4.0 && Math.random() > 0.25) {
+                            // Pallet load box
+                            const boxH = 0.8 + Math.random() * 0.4;
+                            const boxW = 0.8 + Math.random() * 0.4;
+                            const stockMat = new THREE.MeshStandardMaterial({
+                                color: [0xdc2626, 0xd2b48c, 0xf59e0b, 0x10b981, 0x6b7280][Math.floor(Math.random()*5)],
+                                roughness: 0.7
+                            });
+                            const stock = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), stockMat);
+                            stock.position.set(xBoard + (Math.random()-0.5)*1.2, y + 0.05 + boxH/2, (Math.random()-0.5)*0.4);
+                            stock.castShadow = true;
+                            rackGroup.add(stock);
+                        }
+                    }
+                });
+
+                group.add(rackGroup);
+            }
+            return group;
+        }
+
+        // Benches
+        function createAssemblyBench(x, z) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+            const table = new THREE.Mesh(new THREE.BoxGeometry(3, 0.9, 1.5), materials.conveyor);
+            table.position.y = 0.45;
+            table.castShadow = true;
+            group.add(table);
+
+            const panelMat = new THREE.MeshStandardMaterial({color: 0x475569, metalness: 0.5});
+            const panel = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.8, 0.1), panelMat);
+            panel.position.set(0, 1.2, -0.65);
+            group.add(panel);
+
+            const screen = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), new THREE.MeshBasicMaterial({color: 0x111827}));
+            screen.position.set(-0.6, 1.2, -0.58);
+            group.add(screen);
+
+            return group;
+        }
+
+        // Office desk with computer monitor
+        function createOfficeDesk(x, z, rotation) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = rotation;
+
+            const desk = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 1.2), materials.officeWood);
+            desk.position.y = 0.38;
+            desk.castShadow = true;
+            group.add(desk);
+
+            const legsMat = new THREE.MeshStandardMaterial({color: 0x1e293b, roughness: 0.6});
+            const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 1.2), legsMat);
+            leg1.position.set(-1.0, 0.38, 0);
+            group.add(leg1);
+
+            const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 1.2), legsMat);
+            leg2.position.set(1.0, 0.38, 0);
+            group.add(leg2);
+
+            // Screen
+            const screenStand = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), legsMat);
+            screenStand.position.set(0, 0.9, -0.2);
+            group.add(screenStand);
+
+            const screen = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), new THREE.MeshBasicMaterial({color: 0x1e293b}));
+            screen.position.set(0, 1.15, -0.2);
+            group.add(screen);
+
+            // Chair
+            const chair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), materials.officeBlue);
+            chair.position.set(0, 0.4, 0.8);
+            chair.castShadow = true;
+            group.add(chair);
+
+            return group;
+        }
+
+        // --- DYNAMIC TELEMETRY INTERACTION ---
+        function initTelemetry() {
+            // Update stats panel values periodically
+            setInterval(() => {
+                if (state.simSpeed > 0) {
+                    const baseThroughput = 850 + Math.floor(Math.random() * 80);
+                    document.getElementById('stat-throughput').innerText = Math.round(baseThroughput * state.simSpeed) + " / hr";
+                    
+                    const noiseOEE = (83 + Math.random() * 3).toFixed(1);
+                    document.getElementById('stat-oee').innerText = noiseOEE + "%";
+
+                    const power = 410 + Math.floor(Math.random() * 35);
+                    document.getElementById('stat-power').innerText = power + " kW";
+                }
+            }, 3000);
+
+            // Logging stream simulation
+            const logActivities = [
+                { tag: "PRODUCTION", msg: "DD Motor Stator: Part cycle complete. Quality check pass." },
+                { tag: "PRODUCTION", msg: "DD Motor Rotor: Station 4 magnetic alignment calibrated." },
+                { tag: "INVENTORY", msg: "P1 Finish Good Warehouse: Pallet stored in aisle B." },
+                { tag: "INVENTORY", msg: "P2 Warehouse: Motor batch ready for shuttle dispatch." },
+                { tag: "TELEMETRY", msg: "WM Sub Line: Washing machine drums feed conveyor nominal." },
+                { tag: "SYSTEM", msg: "Thermal scan: Transformers operating at optimal 42°C." },
+                { tag: "MAINTENANCE", msg: "Robotic cell R-12 tool head lube cycle triggered." }
+            ];
+
+            setInterval(() => {
+                if (state.simSpeed > 0) {
+                    const activity = logActivities[Math.floor(Math.random() * logActivities.length)];
+                    logEvent(activity.tag, activity.msg);
+                }
+            }, 4500);
+
+            // Draw initial simple diagnostic canvas chart
+            updateChart();
+        }
+
+        function logEvent(tag, message) {
+            const logList = document.getElementById('logList');
+            const now = new Date();
+            const timeStr = `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            item.innerHTML = `<span class="log-time">${timeStr}</span><span class="log-tag">[${tag}]</span><span>${message}</span>`;
+            
+            logList.appendChild(item);
+            logList.scrollTop = logList.scrollHeight;
+
+            // Cap logs count
+            if (logList.children.length > 25) {
+                logList.removeChild(logList.firstChild);
+            }
+        }
+
+        function updateChart() {
+            const canvas = document.getElementById('details-chart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw simple chart background grid
+            ctx.strokeStyle = "rgba(255,255,255,0.05)";
+            ctx.lineWidth = 1;
+            for (let i = 0; i < canvas.height; i += 20) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            // Draw line chart
+            ctx.strokeStyle = "#00f0ff";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const padding = 10;
+            const step = (canvas.width - padding * 2) / (chartData.length - 1);
+            const maxVal = 220;
+            const minVal = 140;
+            const scaleY = (canvas.height - padding * 2) / (maxVal - minVal);
+
+            chartData.forEach((val, index) => {
+                const x = padding + index * step;
+                const y = canvas.height - padding - (val - minVal) * scaleY;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            // Gradient below line
+            ctx.fillStyle = "rgba(0, 240, 255, 0.1)";
+            ctx.lineTo(padding + (chartData.length - 1) * step, canvas.height - padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.fill();
+
+            // Dots
+            ctx.fillStyle = "#00f0ff";
+            chartData.forEach((val, index) => {
+                const x = padding + index * step;
+                const y = canvas.height - padding - (val - minVal) * scaleY;
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // --- ANIMATION LOOP ---
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            const time = timestamp * 0.001 * state.simSpeed;
+
+            // 1. Move conveyor product boxes
+            if (state.simSpeed > 0) {
+                boxesArray.forEach(b => {
+                    b.mesh.position[b.axis] += b.speed * state.simSpeed * 0.2;
+                    // boundary check reset
+                    if (b.speed > 0 && b.mesh.position[b.axis] > b.maxCoord) {
+                        b.mesh.position[b.axis] = b.minCoord;
+                    } else if (b.speed < 0 && b.mesh.position[b.axis] < b.minCoord) {
+                        b.mesh.position[b.axis] = b.maxCoord;
+                    }
+                });
+
+                // 2. Rotate robotic arm joints
+                robotsArray.forEach(r => {
+                    r.group.rotation.y = Math.sin(time * r.baseRotSpeed) * 0.5;
+                    r.arm2.rotation.z = Math.PI / 4 + Math.cos(time * r.jointRotSpeed) * 0.25;
+                    r.gripper.position.y = 2.7 + Math.sin(time * r.jointRotSpeed * 1.5) * 0.15;
+                });
+            }
+
+            // 3. Pulse machine status lights
+            statusLights.forEach(s => {
+                const intensity = 0.5 + Math.sin(timestamp * 0.008) * 0.5;
+                s.beacon.material.opacity = 0.5 + intensity * 0.5;
+                // Update pointlights depending on day/night setting
+                if (state.timeOfDay > 18 || state.timeOfDay < 6) {
+                    s.light.intensity = intensity * 1.5;
+                } else {
+                    s.light.intensity = 0.0;
+                }
+            });
+
+            // 4. Smoothly LERP floor group position targets (Layout transitions)
+            p1Group.position.lerp(interp.p1Pos, 0.08);
+            p2Group.position.lerp(interp.p2Pos, 0.08);
+
+            // 5. Smoothly LERP opacity targets
+            p1Group.traverse(child => {
+                if (child.isMesh && child.name !== "structure-layers" && child.material && child.material.transparent) {
+                    if (state.levelFilter === 'p2') {
+                        child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, 0.05, 0.08);
+                    } else {
+                        const targetOpacity = child.userData.originalOpacity || (child.material.opacity === 1 ? 1 : child.material.opacity);
+                        child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, targetOpacity, 0.08);
+                    }
+                }
+            });
+
+            p2Group.traverse(child => {
+                if (child.isMesh && child.name !== "structure-layers" && child.material && child.material.transparent) {
+                    if (state.levelFilter === 'p1') {
+                        child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, 0.05, 0.08);
+                    } else {
+                        const targetOpacity = child.userData.originalOpacity || (child.material.opacity === 1 ? 1 : child.material.opacity);
+                        child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, targetOpacity, 0.08);
+                    }
+                }
+            });
+
+            // 6. Camera Transitions on Selection
+            if (interp.isTransitioningCamera) {
+                interp.transitionProgress += 0.02;
+                controls.target.lerp(interp.cameraTarget, 0.08);
+                if (interp.cameraPos) {
+                    camera.position.lerp(interp.cameraPos, 0.08);
+                }
+
+                if (interp.transitionProgress >= 1.0) {
+                    interp.isTransitioningCamera = false;
+                }
+            }
+
+            // Update OrbitControls
+            controls.update();
+
+            // Update Compass rotation aligned to camera heading
+            updateCompass();
+
+            // Render
+            renderer.render(scene, camera);
+        }
+
+        function updateCompass() {
+            const compass = document.getElementById('compass-rose');
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            // compute horizontal angle
+            const angle = Math.atan2(dir.x, dir.z);
+            const deg = angle * (180 / Math.PI);
+            compass.style.transform = `rotate(${deg}deg)`;
+        }
+
+        // --- INTERACTIVE RAYCASTING EVENTS ---
+
+        function onMouseMove(event) {
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / container.clientWidth) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / container.clientHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(clickableObjects);
+
+            const tooltip = document.getElementById('hover-tooltip');
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+                const zoneId = hitObj.userData.zoneId;
+                const data = zoneData[zoneId];
+
+                if (hoveredObjectId !== zoneId) {
+                    hoveredObjectId = zoneId;
+                    // Reset all other interact volumes color highlight
+                    clickableObjects.forEach(obj => {
+                        if (obj.material) obj.material.opacity = 0.0;
+                    });
+                    
+                    // Highlight the hovered block
+                    hitObj.material.opacity = 0.15;
+                    hitObj.material.color.setHex(0x00f0ff);
+                }
+
+                // Show tooltip
+                tooltip.style.left = `${event.clientX}px`;
+                tooltip.style.top = `${event.clientY}px`;
+                tooltip.style.display = 'block';
+                tooltip.innerText = data.name;
+            } else {
+                if (hoveredObjectId !== null) {
+                    hoveredObjectId = null;
+                    clickableObjects.forEach(obj => {
+                        if (obj.material) obj.material.opacity = 0.0;
+                    });
+                }
+                tooltip.style.display = 'none';
+            }
+        }
+
+        function onClick(event) {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(clickableObjects);
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+                const zoneId = hitObj.userData.zoneId;
+                selectObject(zoneId);
+            }
+        }
+
+        function selectObject(zoneId) {
+            state.activeSelection = zoneId;
+            const data = zoneData[zoneId];
+            if (!data) return;
+
+            // Highlight the details card
+            document.getElementById('details-default-view').classList.add('hidden');
+            const activeView = document.getElementById('details-active-view');
+            activeView.classList.remove('hidden');
+
+            document.getElementById('obj-name').innerText = data.name;
+            document.getElementById('obj-level').innerText = data.level;
+            document.getElementById('obj-commission').innerText = data.commission;
+            document.getElementById('obj-target').innerText = data.target;
+            document.getElementById('obj-rate').innerText = data.rate;
+            document.getElementById('obj-stations').innerText = data.stations;
+
+            const statusBadge = document.getElementById('obj-status');
+            statusBadge.innerText = data.status;
+            if (data.status === "running") {
+                statusBadge.className = "obj-status-badge status-running";
+            } else {
+                statusBadge.className = "obj-status-badge status-idle";
+            }
+
+            // Animate target changes in log
+            logEvent("TELEMETRY", `Focusing diagnostic sensors on ${data.name}`);
+
+            // Transition Camera & Controls target smoothly
+            interp.cameraTarget.copy(new THREE.Vector3(data.pos.x, data.pos.y, data.pos.z));
+            
+            // Apply corresponding offsets depending on floor coordinates
+            let parentOffset = new THREE.Vector3();
+            if (data.level === "P1-1F") {
+                parentOffset.copy(p1Group.position);
+            } else {
+                parentOffset.copy(p2Group.position);
+            }
+
+            interp.cameraTarget.add(parentOffset);
+            
+            interp.cameraPos = new THREE.Vector3(data.camOffset.x, data.camOffset.y, data.camOffset.z);
+            interp.cameraPos.add(parentOffset);
+            
+            interp.transitionProgress = 0.0;
+            interp.isTransitioningCamera = true;
+
+            // Update chart data
+            if (data.status === 'idle') {
+                chartData.fill(0);
+            } else {
+                chartData.forEach((_, idx) => {
+                    const base = parseInt(data.rate);
+                    chartData[idx] = base + Math.floor((Math.random() - 0.5) * 15);
+                });
+            }
+            updateChart();
+        }
+
+        function deselectObject() {
+            state.activeSelection = null;
+            document.getElementById('details-active-view').classList.add('hidden');
+            document.getElementById('details-default-view').classList.remove('hidden');
+
+            interp.cameraTarget.set(0, 0, 0);
+            interp.cameraPos = new THREE.Vector3(0, 75, 90);
+            interp.transitionProgress = 0.0;
+            interp.isTransitioningCamera = true;
+        }
+
+        // --- CONTROL UI CALLBACKS ---
+
+        function setCameraMode(mode) {
+            state.viewMode = mode;
+            document.getElementById('btn-perspective').classList.toggle('active', mode === 'perspective');
+            document.getElementById('btn-ortho').classList.toggle('active', mode === 'ortho');
+
+            if (mode === 'ortho') {
+                // Animate to strict top-down view
+                interp.cameraTarget.set(0, 0, 0);
+                interp.cameraPos = new THREE.Vector3(0, 85, 0.01); // offset slightly so orbitcontrols doesn't break
+                interp.isTransitioningCamera = true;
+                interp.transitionProgress = 0.0;
+                controls.enableRotate = false;
+            } else {
+                controls.enableRotate = true;
+                deselectObject();
+            }
+        }
+
+        function setLayoutMode(layout) {
+            state.layoutMode = layout;
+            document.getElementById('btn-sidebyside').classList.toggle('active', layout === 'sidebyside');
+            document.getElementById('btn-stacked').classList.toggle('active', layout === 'stacked');
+
+            const explodeGroup = document.getElementById('explode-group');
+
+            if (layout === 'sidebyside') {
+                explodeGroup.style.display = 'none';
+                interp.p1Pos.set(0, 0, 19.5);
+                interp.p2Pos.set(0, 0, -19.5);
+                corridorMesh.visible = true;
+            } else {
+                explodeGroup.style.display = 'block';
+                interp.p1Pos.set(0, 0, 0);
+                interp.p2Pos.set(0, state.explodeDist, 0);
+                corridorMesh.visible = false;
+            }
+            logEvent("SYSTEM", `Layout shifted to ${layout.toUpperCase()}`);
+        }
+
+        function updateExplode(val) {
+            const dist = parseFloat(val);
+            state.explodeDist = dist;
+            document.getElementById('explode-val').innerText = dist.toFixed(1) + " m";
+            
+            if (state.layoutMode === 'stacked') {
+                interp.p2Pos.set(0, dist, 0);
+            }
+        }
+
+        function setLevelFilter(level) {
+            state.levelFilter = level;
+            document.getElementById('btn-floor-all').classList.toggle('active', level === 'all');
+            document.getElementById('btn-floor-p2').classList.toggle('active', level === 'p2');
+            document.getElementById('btn-floor-p1').classList.toggle('active', level === 'p1');
+
+            if (level === 'all') {
+                p1Group.visible = true;
+                p2Group.visible = true;
+            } else if (level === 'p1') {
+                p1Group.visible = true;
+                p2Group.visible = false;
+            } else {
+                p1Group.visible = false;
+                p2Group.visible = true;
+            }
+            logEvent("SYSTEM", `Filters set to level: ${level.toUpperCase()}`);
+        }
+
+        function setRenderStyle(style) {
+            state.renderStyle = style;
+            document.getElementById('btn-style-solid').classList.toggle('active', style === 'solid');
+            document.getElementById('btn-style-wire').classList.toggle('active', style === 'wireframe');
+            document.getElementById('btn-style-tex').classList.toggle('active', style === 'texture');
+
+            const isNodeLayerVisible = (node) => {
+                let parent = node.parent;
+                while (parent) {
+                    if (parent.name && parent.name.startsWith("layer-")) {
+                        const layerKey = parent.name.replace("layer-", "");
+                        return state.visibleLayers[layerKey] !== false;
+                    }
+                    parent = parent.parent;
+                }
+                return true;
+            };
+
+            const applyMaterial = (node) => {
+                if (node.isMesh && node.userData.originalMaterial) {
+                    if (style === 'texture') {
+                        if (node.geometry.type === 'PlaneGeometry' && (node.parent === p1Group || node.parent === p2Group)) {
+                            node.material = node.userData.originalMaterial;
+                            node.visible = true;
+                        } else {
+                            node.visible = false;
+                        }
+                    } else if (style === 'wireframe') {
+                        if (node.geometry.type === 'PlaneGeometry' && (node.parent === p1Group || node.parent === p2Group)) {
+                            node.material = new THREE.MeshBasicMaterial({ color: 0x0a101d, wireframe: true });
+                            node.visible = true;
+                        } else {
+                            if (node.parent && node.parent.name === "layer-walls" && node.geometry.type === 'BoxGeometry') {
+                                node.material = materials.wireframeWall;
+                            } else {
+                                node.material = new THREE.MeshBasicMaterial({
+                                    color: node.userData.colorHex || 0x00f0ff,
+                                    wireframe: true
+                                });
+                            }
+                            node.visible = isNodeLayerVisible(node);
+                        }
+                    } else {
+                        // solid mode
+                        if (node.parent && node.parent.name === "layer-walls" && node.geometry.type === 'BoxGeometry') {
+                            node.material = materials.transparentWall;
+                        } else {
+                            node.material = node.userData.originalMaterial;
+                        }
+                        node.visible = isNodeLayerVisible(node);
+                    }
+                }
+            };
+
+            p1Group.traverse(applyMaterial);
+            p2Group.traverse(applyMaterial);
+
+            logEvent("SYSTEM", `Render style configured: ${style.toUpperCase()}`);
+        }
+
+        function toggleLayer(layerName, isVisible) {
+            state.visibleLayers[layerName] = isVisible;
+
+            const hideShowLayer = (group) => {
+                const targetLayer = group.getObjectByName(`layer-${layerName}`);
+                if (targetLayer) targetLayer.visible = isVisible;
+            };
+
+            if (layerName === 'grid') {
+                gridHelper.visible = isVisible;
+            } else {
+                hideShowLayer(p1Group);
+                hideShowLayer(p2Group);
+            }
+            logEvent("SYSTEM", `Layer ${layerName.toUpperCase()} visibility changed to: ${isVisible}`);
+        }
+
+        function updateTimeOfDay(val) {
+            const hours = parseFloat(val);
+            state.timeOfDay = hours;
+
+            const hStr = String(Math.floor(hours)).padStart(2, '0');
+            const mStr = String(Math.floor((hours % 1) * 60)).padStart(2, '0');
+            document.getElementById('time-val').innerText = `${hStr}:${mStr}`;
+
+            // Calculate Sun Light position and intensity based on hours (0 to 24)
+            const angle = (hours / 24) * Math.PI * 2 - Math.PI / 2;
+            sunLight.position.x = 80 * Math.cos(angle);
+            sunLight.position.y = 80 * Math.sin(angle);
+            sunLight.position.z = 40 * Math.sin(angle);
+
+            // Change background & ambient depending on cycle
+            if (hours >= 6 && hours <= 18) {
+                // Day mode
+                const dayProgress = (hours - 6) / 12; // 0 to 1
+                const intensity = Math.sin(dayProgress * Math.PI); // peak at 12:00
+                sunLight.intensity = intensity * 1.3;
+                sunLight.color.setHex(0xffffff);
+                
+                ambientLight.intensity = 0.4 + intensity * 0.2;
+                ambientLight.color.setHex(0xffffff);
+
+                scene.background.setHex(0x0a0c10);
+                scene.fog.color.setHex(0x0a0c10);
+            } else {
+                // Night mode
+                sunLight.intensity = 0;
+                ambientLight.intensity = 0.12;
+                ambientLight.color.setHex(0x243b55); // cool dark night blue
+
+                scene.background.setHex(0x050608);
+                scene.fog.color.setHex(0x050608);
+            }
+        }
+
+        function updateSimSpeed(val) {
+            const speed = parseFloat(val);
+            state.simSpeed = speed;
+            document.getElementById('speed-val').innerText = speed.toFixed(1) + "x";
+            logEvent("SYSTEM", `Simulation velocity coefficient updated to ${speed.toFixed(1)}`);
+        }
+
+        // --- SEARCH AUTOCOMPLETION & FLY-TO ---
+
+        function handleSearch() {
+            const val = document.getElementById('searchBox').value.toLowerCase();
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.innerHTML = '';
+
+            if (val.trim() === '') {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+
+            const matches = searchOptions.filter(item => item.name.toLowerCase().includes(val));
+
+            if (matches.length > 0) {
+                matches.forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = 'search-item';
+                    row.innerText = `${item.name} [${item.level}]`;
+                    row.onclick = () => {
+                        selectObject(item.id);
+                        document.getElementById('searchBox').value = item.name;
+                        resultsDiv.style.display = 'none';
+                    };
+                    resultsDiv.appendChild(row);
+                });
+                resultsDiv.style.display = 'block';
+            } else {
+                resultsDiv.style.display = 'none';
+            }
+        }
+
+        // --- GENERAL WINDOW MANAGEMENT ---
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(width, height);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LGEVH 3D Reconstruction — Interactive Model</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-bg: rgba(20, 24, 33, 0.75);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --accent-color: #f11a43; /* LG Red-ish Pink */
+            --accent-glow: rgba(241, 26, 67, 0.4);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --glass-blur: blur(12px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-main);
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* UI Overlay */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 320px 1fr 360px;
+            grid-template-rows: 80px 1fr;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Header */
+        header {
+            grid-column: 1 / 4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+            padding: 0 10px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .brand-title h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #fff, var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-title p {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'Space Mono', monospace;
+        }
+
+        /* Controls Panel (Left) */
+        .controls-sidebar {
+            grid-column: 1;
+            grid-row: 2;
+            gap: 15px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        /* Details Panel (Right) */
+        .details-sidebar {
+            grid-column: 3;
+            grid-row: 2;
+            gap: 20px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-left: 3px solid var(--accent-color);
+            padding-left: 8px;
+        }
+
+        /* Form Controls */
+        .control-group {
+            margin-bottom: 12px;
+        }
+
+        .control-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        button.active {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        /* Time Slider */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-color);
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Building List / Search */
+        .search-box {
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: var(--accent-color);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .building-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .building-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .building-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .building-item.selected {
+            background: rgba(241, 26, 67, 0.1);
+            border-color: var(--accent-color);
+        }
+
+        .building-id {
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+
+        /* Building Details Display */
+        .detail-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .detail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-lbl {
+            color: var(--text-muted);
+        }
+
+        .detail-val {
+            font-weight: 600;
+        }
+
+        .badge {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        /* Sign-off Banner */
+        .sign-off-panel {
+            grid-column: 2;
+            grid-row: 2;
+            align-self: end;
+            justify-self: center;
+            max-width: 600px;
+            text-align: center;
+            padding: 12px 20px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .sign-off-title {
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--accent-color);
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+
+        /* CSV Data Table Panel */
+        .csv-toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 20;
+        }
+
+        .data-table-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .data-table-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .data-table-container {
+            width: 100%;
+            max-width: 1200px;
+            max-height: 80%;
+            background: #121620;
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .table-wrapper {
+            overflow: auto;
+            flex: 1;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-family: 'Space Mono', monospace;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        /* Loading Overlay */
+        #loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(241, 26, 67, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Crosshair Helper */
+        #compass-rose {
+            position: absolute;
+            bottom: 30px;
+            left: 350px;
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .ui-layer {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                overflow-y: auto;
+            }
+            .controls-sidebar { grid-column: 1; grid-row: 2; max-height: none; }
+            .details-sidebar { grid-column: 1; grid-row: 3; max-height: none; }
+            #compass-rose { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <div style="font-family: 'Space Mono', monospace; font-size: 14px; letter-spacing: 2px;">INITIALIZING LGEVH scene...</div>
+    </div>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Compass Rose -->
+    <svg id="compass-rose" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+        <line x1="50" y1="5" x2="50" y2="95" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+        <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+        <!-- Arrow pointing North -->
+        <g id="compass-needle" transform="rotate(45, 50, 50)">
+            <polygon points="50,15 57,40 50,33 43,40" fill="#f11a43"/>
+            <polygon points="50,85 57,60 50,67 43,60" fill="rgba(255,255,255,0.3)"/>
+            <text x="50" y="10" font-family="Space Mono" font-size="10" fill="#f11a43" text-anchor="middle" font-weight="700">N</text>
+        </g>
+    </svg>
+
+    <!-- UI Overlay Layer -->
+    <div class="ui-layer">
+        
+        <!-- Header -->
+        <header class="glass-panel interactive">
+            <div class="brand">
+                <div class="brand-logo">LG</div>
+                <div class="brand-title">
+                    <h1>LGEVH 3D Reconstruction</h1>
+                    <p>Trang Due IP · An Duong · Hai Phong · Vietnam</p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-export-kml" class="btn-sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> KML Data</button>
+            </div>
+        </header>
+
+        <!-- Left Controls Sidebar -->
+        <div class="controls-sidebar glass-panel interactive">
+            <h3>Render Controls</h3>
+            
+            <div class="control-group">
+                <span class="control-label">View Mode</span>
+                <div class="btn-group">
+                    <button id="view-3d" class="active">3D Orbit</button>
+                    <button id="view-2d">Top-Down</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <span class="control-label">Shading style</span>
+                <div class="btn-group">
+                    <button id="shade-solid" class="active">Solid</button>
+                    <button id="shade-wire">Wireframe</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <span class="control-label">Time of Day</span>
+                <div class="slider-container">
+                    <input type="range" id="time-slider" min="6" max="18" step="0.5" value="10">
+                    <span id="time-display" style="font-family: 'Space Mono', monospace; font-size: 12px; width: 45px;">10:00</span>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 10px;">Structures Catalog</h3>
+            
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search buildings...">
+            </div>
+
+            <div class="building-list" id="building-list-container">
+                <!-- Dynamic Content -->
+            </div>
+        </div>
+
+        <!-- Central Sign-off (Bottom) -->
+        <div class="sign-off-panel glass-panel interactive">
+            <div class="sign-off-title">Evidence-Based Validation Sign-Off</div>
+            <p style="color: var(--text-muted); font-size: 11px;">
+                This 3D model represents only structures and features confirmed by: Google Maps Satellite (Maxar 2026), Google Maps Street View (October 2024), and local developer documentation. No speculative or assumed geometry was added. Outstanding gaps: rooftop HVAC layout, solar panels.
+            </p>
+        </div>
+
+        <!-- Right Details Sidebar -->
+        <div class="details-sidebar glass-panel interactive">
+            <h3>Object Properties</h3>
+            
+            <div id="no-selection-prompt" style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">
+                Click any building or list item to view details and inspect dimensions.
+            </div>
+
+            <div id="details-container" style="display: none; flex-direction: column; gap: 15px;">
+                <h2 id="prop-name" style="font-size: 18px; font-weight: 700; color: var(--accent-color);">Building</h2>
+                
+                <div class="detail-card">
+                    <div class="detail-row">
+                        <span class="detail-lbl">ID Tag</span>
+                        <span class="detail-val" id="prop-id" style="font-family: 'Space Mono', monospace;">B01</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-lbl">Verification Status</span>
+                        <span class="badge" id="prop-status">Confirmed Y</span>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div class="detail-row">
+                        <span class="detail-lbl">Footprint Area</span>
+                        <span class="detail-val" id="prop-area">0 m²</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-lbl">Estimated Height</span>
+                        <span class="detail-val" id="prop-height">0 m</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-lbl">Roof Configuration</span>
+                        <span class="detail-val" id="prop-roof">Flat</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-lbl">Facade Color Hex</span>
+                        <span class="detail-val" id="prop-color">#ffffff</span>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <span class="control-label" style="margin-bottom: 4px;">Height Verification Method</span>
+                    <p id="prop-height-source" style="font-size: 12px; line-height: 1.4; color: var(--text-muted); margin-bottom: 10px;"></p>
+                    
+                    <span class="control-label" style="margin-bottom: 4px;">Uncertainty & Source Note</span>
+                    <p id="prop-note" style="font-size: 12px; line-height: 1.4; color: var(--text-muted);"></p>
+                </div>
+
+                <button id="btn-focus" style="width: 100%;" class="active">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                    Focus Camera View
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Data Table View Button (Floating) -->
+    <button class="csv-toggle-btn glass-panel interactive active" id="btn-view-table">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3zM21 9H3M21 15H3M12 3v18"/></svg>
+        Data Log CSV
+    </button>
+
+    <!-- Data Table Modal Overlay -->
+    <div class="data-table-overlay" id="table-overlay">
+        <div class="data-table-container">
+            <div class="table-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="brand-logo" style="width: 28px; height: 28px; font-size: 14px;">CSV</div>
+                    <h2 style="font-size: 18px; font-weight: 600;">LGEVH Verified Structures Data Log</h2>
+                </div>
+                <button id="btn-close-table" style="padding: 6px 12px; font-weight: 600;">Close [Esc]</button>
+            </div>
+            <div class="table-wrapper">
+                <table id="csv-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type / Use</th>
+                            <th>Footprint (m²)</th>
+                            <th>Height (m)</th>
+                            <th>Height Source</th>
+                            <th>Roof Shape</th>
+                            <th>Color Hex</th>
+                            <th>Confirmed</th>
+                            <th>Uncertainty Note</th>
+                            <th>Source</th>
+                            <th>Capture Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+
+    <script>
+        // Database of confirmed features (mirrors data_log.csv)
+        const campusData = [
+            {
+                id: 'B01',
+                name: 'Main Production Hall NW',
+                type: 'Production Hall NW',
+                area: 83600,
+                height: 15,
+                heightSource: 'Shadow-based estimate (suncalc sun-angle compared with satellite shadow profiles)',
+                roofType: 'Sawtooth skylights',
+                color: '#C8C8C8',
+                confirmed: 'Y',
+                note: 'Large assembly bay; width 220m, length 380m. Flat base with parallel sawtooth glazed skylight grids running along the length. Concrete walls.',
+                source: 'Google Maps Satellite',
+                date: '2026-06-05',
+                pos: { x: 320, z: 350 },
+                dim: { w: 380, l: 220 }
+            },
+            {
+                id: 'B02',
+                name: 'Main Production Hall SE',
+                type: 'Production Hall SE',
+                area: 68400,
+                height: 15,
+                heightSource: 'Shadow-based estimate',
+                roofType: 'Sawtooth skylights',
+                color: '#C8C8C8',
+                confirmed: 'Y',
+                note: 'Secondary assembly lines; width 180m, length 380m. Parallel sawtooth panels. Facade verified via photosphere from internal access road.',
+                source: 'Google Maps Satellite',
+                date: '2026-06-05',
+                pos: { x: 420, z: 160 },
+                dim: { w: 380, l: 180 }
+            },
+            {
+                id: 'B03',
+                name: 'Canteen LG',
+                type: 'Canteen / Cafeteria',
+                area: 4050,
+                height: 8,
+                heightSource: 'Shadow comparison',
+                roofType: 'Flat',
+                color: '#E0E0E0',
+                confirmed: 'Y',
+                note: 'Dedicated dining hall located in the central courtyard between the NW and SE production halls.',
+                source: 'Google Maps label & Satellite',
+                date: '2026-06-05',
+                pos: { x: 250, z: 250 },
+                dim: { w: 90, l: 45 }
+            },
+            {
+                id: 'B04',
+                name: 'Office & Administration Wing',
+                type: 'Administrative Frontage',
+                area: 3600,
+                height: 12,
+                heightSource: 'Street View facade floor counting (3 floors)',
+                roofType: 'Flat',
+                color: '#F0F0F0',
+                confirmed: 'Y',
+                note: 'Admin office attached to SE factory frontage; multi-window band glazing panels visible in October 2024 Street View.',
+                source: 'Google Maps Street View',
+                date: '2024-10-01',
+                pos: { x: 550, z: 40 },
+                dim: { w: 120, l: 30 }
+            },
+            {
+                id: 'B05',
+                name: 'KyungSung Building',
+                type: 'Industrial Production',
+                area: 7150,
+                height: 12,
+                heightSource: 'Shadow-based estimate',
+                roofType: 'Flat',
+                color: '#C0C0C0',
+                confirmed: 'Y',
+                note: 'Ancillary partner facility located on the SW edge of the campus perimeter; flat roof structure.',
+                source: 'Google Maps Satellite',
+                date: '2026-06-05',
+                pos: { x: 100, z: 120 },
+                dim: { w: 110, l: 65 }
+            },
+            {
+                id: 'B06',
+                name: 'Higa Building',
+                type: 'Industrial Production',
+                area: 2925,
+                height: 10,
+                heightSource: 'Shadow-based estimate',
+                roofType: 'Flat',
+                color: '#B8B8B8',
+                confirmed: 'Y',
+                note: 'Small component plant located next to the SW secondary driveway. Access gate directly facing Đ. LG.',
+                source: 'Google Maps Satellite',
+                date: '2026-06-05',
+                pos: { x: 80, z: 230 },
+                dim: { w: 65, l: 45 }
+            },
+            {
+                id: 'B07a',
+                name: 'Main Gate Security Office',
+                type: 'Security Guard Booth',
+                area: 96,
+                height: 4,
+                heightSource: 'Street View visual calibration',
+                roofType: 'Flat with overhang',
+                color: '#FFFFFF',
+                confirmed: 'Y',
+                note: 'Guard house at QL10. White cantilevered concrete canopy canopy; sliding metal fence gate controls entry.',
+                source: 'Google Maps Street View',
+                date: '2024-10-01',
+                pos: { x: 600, z: 10 },
+                dim: { w: 12, l: 8 }
+            },
+            {
+                id: 'B07b',
+                name: 'Side Gate Security Office',
+                type: 'Security Guard Booth',
+                area: 60,
+                height: 4,
+                heightSource: 'Street View visual calibration',
+                roofType: 'Flat',
+                color: '#E0E0E0',
+                confirmed: 'Y',
+                note: 'SW boundary gate house controlling access to Đ. LG. Connected to sliding metal gate.',
+                source: 'Google Maps Street View',
+                date: '2024-10-01',
+                pos: { x: 30, z: 100 },
+                dim: { w: 10, l: 6 }
+            }
+        ];
+
+        // Global variables for Three.js
+        let scene, camera, renderer, controls;
+        let ambientLight, dirLight;
+        let buildingMeshes = [];
+        let selectedBuilding = null;
+        let currentShading = 'solid';
+        let viewMode = '3d';
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            initThree();
+            buildCampusScene();
+            setupUI();
+            
+            // Hide Loader after initialization
+            setTimeout(() => {
+                const loader = document.getElementById('loader');
+                loader.style.opacity = 0;
+                setTimeout(() => loader.style.display = 'none', 500);
+            }, 1000);
+        });
+
+        // 1. Setup Three.js Context
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0e1118);
+            scene.fog = new THREE.FogExp2(0x0e1118, 0.001);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 3000);
+            camera.position.set(400, 300, 750);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            container.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't go below ground
+            controls.minDistance = 30;
+            controls.maxDistance = 1200;
+            controls.target.set(350, 0, 250);
+
+            // Lights
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            dirLight = new THREE.DirectionalLight(0xffecc4, 1.2);
+            dirLight.position.set(500, 400, 300);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 1500;
+            const d = 600;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.bias = -0.0005;
+            scene.add(dirLight);
+
+            // Window resize handler
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Raycaster for clicking buildings
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            window.addEventListener('click', (e) => {
+                // Ignore if clicked on UI
+                if (e.target.tagName === 'BUTTON' || e.target.closest('.interactive') || e.target.tagName === 'INPUT') return;
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(buildingMeshes, true);
+
+                if (intersects.length > 0) {
+                    // Find root group/mesh with custom building data
+                    let obj = intersects[0].object;
+                    while (obj && !obj.userData.buildingId) {
+                        obj = obj.parent;
+                    }
+                    if (obj && obj.userData.buildingId) {
+                        selectBuilding(obj.userData.buildingId);
+                    }
+                } else {
+                    deselectAll();
+                }
+            });
+
+            // Animation Loop
+            function animate(time) {
+                requestAnimationFrame(animate);
+                TWEEN.update();
+                controls.update();
+                
+                // Update compass needle rotation based on camera angle
+                const needle = document.getElementById('compass-needle');
+                if (needle) {
+                    // Extract camera angle
+                    const dir = new THREE.Vector3();
+                    camera.getWorldDirection(dir);
+                    const angleRad = Math.atan2(dir.x, dir.z);
+                    const angleDeg = (angleRad * 180 / Math.PI) + 135; // adjust for coordinate offset
+                    needle.setAttribute('transform', `rotate(${angleDeg}, 50, 50)`);
+                }
+
+                renderer.render(scene, camera);
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // 2. Build Procedural Scene
+        function buildCampusScene() {
+            // Main Terrain Plane (40 Hectares boundary: 800m x 500m)
+            const terrainGeo = new THREE.PlaneGeometry(1600, 1200);
+            
+            // Procedural grid/grass shader material for high-end look
+            const terrainMat = new THREE.MeshStandardMaterial({
+                color: 0x141822,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+            terrain.rotation.x = -Math.PI / 2;
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+
+            // Concrete main yard (approx 800x500 rectangular zone)
+            const yardGeo = new THREE.BoxGeometry(850, 1, 520);
+            const yardMat = new THREE.MeshStandardMaterial({
+                color: 0x222736,
+                roughness: 0.7,
+                metalness: 0.05
+            });
+            const yard = new THREE.Mesh(yardGeo, yardMat);
+            yard.position.set(380, -0.4, 250);
+            yard.receiveShadow = true;
+            scene.add(yard);
+
+            // Grass patches (Sân bóng LGE soccer field in NE corner)
+            // Center is around X=680, Z=420. Size 120m x 80m.
+            const grassGeo = new THREE.BoxGeometry(160, 1.2, 120);
+            const grassMat = new THREE.MeshStandardMaterial({
+                color: 0x274c35,
+                roughness: 0.9
+            });
+            const grassField = new THREE.Mesh(grassGeo, grassMat);
+            grassField.position.set(680, -0.3, 420);
+            scene.add(grassField);
+
+            // Actual Soccer Field Green Carpet
+            const soccerGeo = new THREE.BoxGeometry(70, 1.4, 50);
+            const soccerMat = new THREE.MeshStandardMaterial({
+                color: 0x1b7e3e,
+                roughness: 0.8
+            });
+            const soccerField = new THREE.Mesh(soccerGeo, soccerMat);
+            soccerField.position.set(700, -0.2, 430);
+            scene.add(soccerField);
+
+            // Roads
+            // 1. QL10 Highway: SE border, running parallel to X-axis at Z = -20
+            const ql10 = new THREE.Mesh(
+                new THREE.BoxGeometry(1200, 1.5, 30),
+                new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.6 })
+            );
+            ql10.position.set(350, -0.2, -15);
+            scene.add(ql10);
+
+            // 2. Đ. LG (SW border access road): Z axis frontage around X = -15
+            const dlg = new THREE.Mesh(
+                new THREE.BoxGeometry(25, 1.5, 700),
+                new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.6 })
+            );
+            dlg.position.set(-15, -0.2, 250);
+            scene.add(dlg);
+
+            // 3. Central Driveway between Factory halls (around Z = 255)
+            const mainDriveway = new THREE.Mesh(
+                new THREE.BoxGeometry(750, 1.3, 20),
+                new THREE.MeshStandardMaterial({ color: 0x1e222d, roughness: 0.7 })
+            );
+            mainDriveway.position.set(350, -0.3, 250);
+            mainDriveway.receiveShadow = true;
+            scene.add(mainDriveway);
+
+            // Add Fencing (Outer Wall)
+            // Low concrete base with transparent metal fencing on top
+            createPerimeterFence();
+
+            // Add Trees (cylinder trunk + sphere leaf geometry)
+            spawnTreeRows();
+
+            // Overhead Metal Pipe Corridor between B01 and B02
+            // Confirmed in photoreconnaissance. Runs parallel to main driveway.
+            createOverheadPipeRack();
+
+            // Build individual buildings
+            campusData.forEach(data => {
+                const bGroup = new THREE.Group();
+                bGroup.userData = { buildingId: data.id };
+                
+                let mainMesh;
+                
+                if (data.roofType === 'Sawtooth skylights') {
+                    // Create main facade box
+                    const wallGeo = new THREE.BoxGeometry(data.dim.w, data.height - 3, data.dim.l);
+                    const wallMat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(data.color),
+                        roughness: 0.4,
+                        metalness: 0.2
+                    });
+                    
+                    const walls = new THREE.Mesh(wallGeo, wallMat);
+                    walls.position.y = (data.height - 3) / 2;
+                    walls.castShadow = true;
+                    walls.receiveShadow = true;
+                    bGroup.add(walls);
+
+                    // Create sawtooth roof profile
+                    // Extruded geometry representing parallel ridge skylights
+                    const shape = new THREE.Shape();
+                    const tw = 12; // Tooth width
+                    const th = 3.0; // Tooth height
+                    const count = Math.floor(data.dim.w / tw);
+                    
+                    // Trace sawtooth peaks & valleys along the width
+                    shape.moveTo(-data.dim.w/2, 0);
+                    for (let i = 0; i < count; i++) {
+                        const sx = -data.dim.w/2 + (i * tw);
+                        shape.lineTo(sx + tw*0.7, th); // Peak
+                        shape.lineTo(sx + tw, 0);     // Valley
+                    }
+                    shape.lineTo(data.dim.w/2, 0);
+                    shape.lineTo(data.dim.w/2, -0.5);
+                    shape.lineTo(-data.dim.w/2, -0.5);
+                    shape.lineTo(-data.dim.w/2, 0);
+
+                    const extrudeSettings = {
+                        steps: 1,
+                        depth: data.dim.l,
+                        bevelEnabled: false
+                    };
+
+                    const roofGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                    const roofMat = new THREE.MeshStandardMaterial({
+                        color: 0x98a0b0, // Light grey metal decking
+                        roughness: 0.5
+                    });
+                    
+                    const roof = new THREE.Mesh(roofGeo, roofMat);
+                    roof.position.set(0, data.height - 3, -data.dim.l / 2);
+                    // Rotate roof to align properly
+                    roof.castShadow = true;
+                    bGroup.add(roof);
+
+                    // Keep a reference to the main mesh for selection bounding box calculations
+                    mainMesh = walls;
+
+                    // Add window strip details to facade
+                    addWindowBands(bGroup, data.dim.w, data.height - 3, data.dim.l);
+                } else {
+                    // Simple Box Building
+                    const geo = new THREE.BoxGeometry(data.dim.w, data.height, data.dim.l);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(data.color),
+                        roughness: 0.5,
+                        metalness: 0.1
+                    });
+                    
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.position.y = data.height / 2;
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    bGroup.add(mesh);
+                    mainMesh = mesh;
+
+                    if (data.id === 'B04') {
+                        // Office front windows glass effect
+                        addOfficeGlazing(bGroup, data.dim.w, data.height, data.dim.l);
+                    } else if (data.id.startsWith('B07')) {
+                        // Guard house aesthetic canopy
+                        addGuardHouseCanopy(bGroup, data.dim.w, data.height, data.dim.l);
+                    }
+                }
+
+                // Apply positioning
+                bGroup.position.set(data.pos.x, 0, data.pos.z);
+                
+                // Add select wire outline mesh for highlighting
+                const selectionOutlineGeo = new THREE.BoxGeometry(data.dim.w + 2, data.height + 1, data.dim.l + 2);
+                const selectionOutlineMat = new THREE.MeshBasicMaterial({
+                    color: 0xf11a43,
+                    wireframe: true,
+                    visible: false,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const outline = new THREE.Mesh(selectionOutlineGeo, selectionOutlineMat);
+                outline.position.y = data.height / 2;
+                bGroup.add(outline);
+                bGroup.userData.outline = outline;
+
+                scene.add(bGroup);
+                buildingMeshes.push(bGroup);
+            });
+        }
+
+        // Add glazed window strips to production walls (evidence from streetview photosphere)
+        function addWindowBands(group, w, h, d) {
+            // Horizontal glazed band running along the long side (facing driveway)
+            const windowMat = new THREE.MeshBasicMaterial({
+                color: 0x1d2e3d,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            // Long front side window
+            const winFront = new THREE.Mesh(new THREE.PlaneGeometry(w - 20, 1.5), windowMat);
+            winFront.position.set(0, h * 0.5, d/2 + 0.1);
+            group.add(winFront);
+
+            // Long back side window
+            const winBack = new THREE.Mesh(new THREE.PlaneGeometry(w - 20, 1.5), windowMat);
+            winBack.position.set(0, h * 0.5, -d/2 - 0.1);
+            winBack.rotation.y = Math.PI;
+            group.add(winBack);
+        }
+
+        // Add premium glass curtain wall facades for office (B04)
+        function addOfficeGlazing(group, w, h, d) {
+            const glassMat = new THREE.MeshStandardMaterial({
+                color: 0x3b82f6,
+                roughness: 0.1,
+                metalness: 0.9,
+                transparent: true,
+                opacity: 0.6
+            });
+            // 3 horizontal bands of glass windows representing 3 floors
+            for (let f = 0; f < 3; f++) {
+                const yPos = 2.0 + (f * 3.5);
+                const glassRow = new THREE.Mesh(new THREE.PlaneGeometry(w - 10, 1.8), glassMat);
+                glassRow.position.set(0, yPos, d/2 + 0.1);
+                group.add(glassRow);
+            }
+        }
+
+        // Add cantilevered overhang canopy to guard houses
+        function addGuardHouseCanopy(group, w, h, d) {
+            const canopyGeo = new THREE.BoxGeometry(w + 6, 0.4, d + 4);
+            const canopyMat = new THREE.MeshStandardMaterial({
+                color: 0x333742,
+                roughness: 0.5
+            });
+            const canopy = new THREE.Mesh(canopyGeo, canopyMat);
+            canopy.position.set(0, h, 0);
+            group.add(canopy);
+        }
+
+        // Overhead metallic pipe connector (confirmed feature)
+        function createOverheadPipeRack() {
+            const rack = new THREE.Group();
+            
+            // Main horizontal pipe box
+            const pipeBoxGeo = new THREE.BoxGeometry(12, 3, 140);
+            const pipeBoxMat = new THREE.MeshStandardMaterial({
+                color: 0x8892a0,
+                metalness: 0.7,
+                roughness: 0.3
+            });
+            const mainPipe = new THREE.Mesh(pipeBoxGeo, pipeBoxMat);
+            mainPipe.position.set(300, 18, 250);
+            rack.add(mainPipe);
+
+            // Columns supporting the pipe rack
+            const colGeo = new THREE.CylinderGeometry(0.8, 0.8, 18);
+            const colMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.8 });
+            
+            const numColumns = 6;
+            for (let i = 0; i < numColumns; i++) {
+                const zPos = 250 - 65 + (i * 26);
+                const colLeft = new THREE.Mesh(colGeo, colMat);
+                colLeft.position.set(295, 9, zPos);
+                
+                const colRight = new THREE.Mesh(colGeo, colMat);
+                colRight.position.set(305, 9, zPos);
+                
+                rack.add(colLeft);
+                rack.add(colRight);
+            }
+
+            scene.add(rack);
+        }
+
+        // Spawn trees (spherical canopy with cylindrical trunks)
+        function spawnTreeRows() {
+            const trees = new THREE.Group();
+            
+            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 6);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
+            const leavesGeo = new THREE.SphereGeometry(3.5, 8, 8);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9 });
+
+            function plantTree(x, z) {
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.set(x, 3, z);
+                trunk.castShadow = true;
+                
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.set(x, 7, z);
+                leaves.castShadow = true;
+                
+                trees.add(trunk);
+                trees.add(leaves);
+            }
+
+            // Tree row along QL10 frontage (Z=15)
+            for (let x = 50; x < 750; x += 30) {
+                plantTree(x, 15);
+            }
+
+            // Tree row around soccer field park
+            for (let z = 320; z < 520; z += 25) {
+                plantTree(600, z);
+            }
+
+            scene.add(trees);
+        }
+
+        // Perimeter Wall & Gates
+        function createPerimeterFence() {
+            const fence = new THREE.Group();
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x475569 }); // Concrete grey
+            const gridMat = new THREE.MeshStandardMaterial({
+                color: 0x94a3b8,
+                transparent: true,
+                opacity: 0.4,
+                wireframe: true
+            });
+
+            function buildWallSegment(x1, z1, x2, z2) {
+                const dx = x2 - x1;
+                const dz = z2 - z1;
+                const length = Math.sqrt(dx*dx + dz*dz);
+                const angle = Math.atan2(dz, dx);
+
+                // Low concrete wall base (0.8m height)
+                const wallBase = new THREE.Mesh(
+                    new THREE.BoxGeometry(length, 0.8, 0.6),
+                    baseMat
+                );
+                wallBase.position.set((x1+x2)/2, 0.4, (z1+z2)/2);
+                wallBase.rotation.y = -angle;
+                fence.add(wallBase);
+
+                // Metal security bars above it (2.2m height)
+                const fenceGrid = new THREE.Mesh(
+                    new THREE.BoxGeometry(length, 2.2, 0.1),
+                    gridMat
+                );
+                fenceGrid.position.set((x1+x2)/2, 1.9, (z1+z2)/2);
+                fenceGrid.rotation.y = -angle;
+                fence.add(fenceGrid);
+            }
+
+            // SE Border along QL10 (x: 0 to 780, z: 5)
+            buildWallSegment(0, 5, 780, 5);
+
+            // SW Border along Đ. LG (x: 5, z: 5 to 500)
+            buildWallSegment(5, 5, 5, 500);
+
+            // NE Border (x: 780, z: 5 to 500)
+            buildWallSegment(780, 5, 780, 500);
+
+            // NW Border (x: 0 to 780, z: 500)
+            buildWallSegment(5, 500, 780, 500);
+
+            scene.add(fence);
+        }
+
+        // 3. User Interface Management
+        function setupUI() {
+            const listContainer = document.getElementById('building-list-container');
+            const tableBody = document.getElementById('table-body');
+            const searchInput = document.getElementById('search-input');
+            const noSelection = document.getElementById('no-selection-prompt');
+            const detailsContainer = document.getElementById('details-container');
+
+            // Populate Catalog Sidebar & CSV Data Table
+            campusData.forEach(b => {
+                // Sidebar List Item
+                const item = document.createElement('div');
+                item.className = 'building-item';
+                item.dataset.id = b.id;
+                item.innerHTML = `
+                    <span class="building-id">${b.id}</span>
+                    <span style="font-weight:600; flex:1; margin-left:10px;">${b.name}</span>
+                    <span style="color:var(--text-muted); font-size:11px;">${b.height}m</span>
+                `;
+                item.addEventListener('click', () => selectBuilding(b.id));
+                listContainer.appendChild(item);
+
+                // CSV Data Table Row
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="building-id">${b.id}</td>
+                    <td>${b.type}</td>
+                    <td>${b.area.toLocaleString()}</td>
+                    <td>${b.height}</td>
+                    <td>${b.heightSource}</td>
+                    <td>${b.roofType}</td>
+                    <td><span style="display:inline-block; width:12px; height:12px; background:${b.color}; border:1px solid rgba(255,255,255,0.2); border-radius:2px; vertical-align:middle; margin-right:5px;"></span>${b.color}</td>
+                    <td><span class="badge">${b.confirmed}</span></td>
+                    <td style="color:var(--text-muted); font-size:11px;">${b.note}</td>
+                    <td>${b.source}</td>
+                    <td>${b.date}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            // Search Filter
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                document.querySelectorAll('.building-item').forEach(item => {
+                    const txt = item.textContent.toLowerCase();
+                    item.style.display = txt.includes(query) ? 'flex' : 'none';
+                });
+            });
+
+            // View modes toggler
+            document.getElementById('view-3d').addEventListener('click', (e) => {
+                setCameraAngle('3d');
+                toggleActiveBtn(e.target, 'view-2d');
+            });
+            document.getElementById('view-2d').addEventListener('click', (e) => {
+                setCameraAngle('2d');
+                toggleActiveBtn(e.target, 'view-3d');
+            });
+
+            // Shading styles toggler
+            document.getElementById('shade-solid').addEventListener('click', (e) => {
+                setShadingMode('solid');
+                toggleActiveBtn(e.target, 'shade-wire');
+            });
+            document.getElementById('shade-wire').addEventListener('click', (e) => {
+                setShadingMode('wireframe');
+                toggleActiveBtn(e.target, 'shade-solid');
+            });
+
+            // Time slider & Day-Night cycle
+            const timeSlider = document.getElementById('time-slider');
+            const timeDisplay = document.getElementById('time-display');
+            timeSlider.addEventListener('input', (e) => {
+                const hour = parseFloat(e.target.value);
+                const min = Math.floor((hour % 1) * 60);
+                timeDisplay.textContent = `${Math.floor(hour).toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+                
+                // Update sun light direction and color
+                const angle = ((hour - 6) / 12) * Math.PI; // sun moves across sky from E to W
+                const lx = Math.cos(angle) * 500;
+                const ly = Math.sin(angle) * 400; // max height at midday
+                dirLight.position.set(lx, ly, 300);
+
+                // Daylight hue changes
+                if (hour < 8 || hour > 16) {
+                    dirLight.color.setHex(0xffaa66); // warm sunset / sunrise
+                    dirLight.intensity = 0.7;
+                    scene.background.setHex(0x0a0c10);
+                    scene.fog.color.setHex(0x0a0c10);
+                } else {
+                    dirLight.color.setHex(0xffecc4); // bright midday sunlight
+                    dirLight.intensity = 1.3;
+                    scene.background.setHex(0x0e1118);
+                    scene.fog.color.setHex(0x0e1118);
+                }
+            });
+
+            // Focus Button
+            document.getElementById('btn-focus').addEventListener('click', () => {
+                if (selectedBuilding) focusOnBuilding(selectedBuilding);
+            });
+
+            // Modal CSV Overlay Toggle
+            const tableOverlay = document.getElementById('table-overlay');
+            document.getElementById('btn-view-table').addEventListener('click', () => {
+                tableOverlay.classList.add('visible');
+            });
+            document.getElementById('btn-close-table').addEventListener('click', () => {
+                tableOverlay.classList.remove('visible');
+            });
+
+            // Close modal with Escape key
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    tableOverlay.classList.remove('visible');
+                }
+            });
+
+            // Download KML Action
+            document.getElementById('btn-export-kml').addEventListener('click', () => {
+                exportKML();
+            });
+        }
+
+        function toggleActiveBtn(activeBtn, siblingId) {
+            activeBtn.classList.add('active');
+            document.getElementById(siblingId).classList.remove('active');
+        }
+
+        // Selection Handlers
+        function selectBuilding(id) {
+            deselectAll();
+
+            const data = campusData.find(b => b.id === id);
+            if (!data) return;
+
+            selectedBuilding = data;
+
+            // Highlight in scene
+            const group = buildingMeshes.find(m => m.userData.buildingId === id);
+            if (group && group.userData.outline) {
+                group.userData.outline.visible = true;
+            }
+
+            // Select in sidebar list
+            const listItem = document.querySelector(`.building-item[data-id="${id}"]`);
+            if (listItem) listItem.classList.add('selected');
+
+            // Show details card
+            document.getElementById('no-selection-prompt').style.display = 'none';
+            const details = document.getElementById('details-container');
+            details.style.display = 'flex';
+
+            document.getElementById('prop-id').textContent = data.id;
+            document.getElementById('prop-name').textContent = data.name;
+            document.getElementById('prop-status').textContent = `Confirmed ${data.confirmed}`;
+            document.getElementById('prop-area').textContent = `${data.area.toLocaleString()} m²`;
+            document.getElementById('prop-height').textContent = `${data.height} meters`;
+            document.getElementById('prop-roof').textContent = data.roofType;
+            document.getElementById('prop-color').textContent = data.color;
+            document.getElementById('prop-height-source').textContent = data.heightSource;
+            document.getElementById('prop-note').textContent = data.note;
+        }
+
+        function deselectAll() {
+            selectedBuilding = null;
+            
+            // Turn off outline indicators
+            buildingMeshes.forEach(m => {
+                if (m.userData.outline) m.userData.outline.visible = false;
+            });
+
+            // Deselect list items
+            document.querySelectorAll('.building-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            // Hide details card
+            document.getElementById('details-container').style.display = 'none';
+            document.getElementById('no-selection-prompt').style.display = 'block';
+        }
+
+        // Camera Views
+        function setCameraAngle(mode) {
+            viewMode = mode;
+            const targetPos = new THREE.Vector3(350, 0, 250);
+            let camPos;
+
+            if (mode === '2d') {
+                // Top-down Ortho-like perspective camera position
+                camPos = new THREE.Vector3(350, 650, 250);
+            } else {
+                // Normal 3D orbit angle
+                camPos = new THREE.Vector3(400, 300, 750);
+            }
+
+            new TWEEN.Tween(camera.position)
+                .to({ x: camPos.x, y: camPos.y, z: camPos.z }, 1000)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            new TWEEN.Tween(controls.target)
+                .to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1000)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+        }
+
+        // Focus camera on selected building
+        function focusOnBuilding(b) {
+            const group = buildingMeshes.find(m => m.userData.buildingId === b.id);
+            if (!group) return;
+
+            const targetPos = new THREE.Vector3(b.pos.x, 0, b.pos.z);
+            // Camera position is slightly offset to view it clearly
+            const camPos = new THREE.Vector3(b.pos.x + 80, b.height + 60, b.pos.z + 120);
+
+            new TWEEN.Tween(camera.position)
+                .to({ x: camPos.x, y: camPos.y, z: camPos.z }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            new TWEEN.Tween(controls.target)
+                .to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+        }
+
+        // Shading Modes
+        function setShadingMode(mode) {
+            currentShading = mode;
+            const wireframeBool = (mode === 'wireframe');
+
+            buildingMeshes.forEach(group => {
+                group.children.forEach(child => {
+                    if (child.material && child !== group.userData.outline) {
+                        child.material.wireframe = wireframeBool;
+                    }
+                });
+            });
+        }
+
+        // Download KML file exporter
+        function exportKML() {
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>LGEVH Campus 3D Footprints</name>
+    <description>Evidence-based building footprints for LG Electronics Vietnam Haiphong campus</description>
+`;
+
+            campusData.forEach(b => {
+                // Approximate coordinate offset calculation (1m ~ 0.000009 degrees WGS84)
+                const latOffset = 20.8590;
+                const lonOffset = 106.5720;
+                const mToDeg = 0.000009;
+
+                // Simple box coordinates projection
+                const dx = (b.dim.w / 2) * mToDeg;
+                const dz = (b.dim.l / 2) * mToDeg;
+                const cx = b.pos.x * mToDeg + lonOffset;
+                const cz = -b.pos.z * mToDeg + latOffset; // flip z-axis for north/south
+
+                const c1 = `${(cx - dx).toFixed(6)}, ${(cz - dz).toFixed(6)}, ${b.height}`;
+                const c2 = `${(cx + dx).toFixed(6)}, ${(cz - dz).toFixed(6)}, ${b.height}`;
+                const c3 = `${(cx + dx).toFixed(6)}, ${(cz + dz).toFixed(6)}, ${b.height}`;
+                const c4 = `${(cx - dx).toFixed(6)}, ${(cz + dz).toFixed(6)}, ${b.height}`;
+
+                kml += `    <Placemark>
+      <name>${b.id} - ${b.name}</name>
+      <description>Footprint Area: ${b.area}m², Height: ${b.height}m. ${b.note}</description>
+      <Polygon>
+        <extrude>1</extrude>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              ${c1}
+              ${c2}
+              ${c3}
+              ${c4}
+              ${c1}
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+`;
+            });
+
+            kml += `  </Document>
+</kml>`;
+
+            const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'LGEVH_Campus_Reconstruction.kml';
+            link.click();
+        }
+    </script>
+</body>
+</html>
