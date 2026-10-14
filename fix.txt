@@ -1,0 +1,3 @@
+-thêm pareto
+-xóa trạm oki
+-xóa so sánh 2 trạm
